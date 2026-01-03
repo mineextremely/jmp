@@ -5,13 +5,29 @@
 # 初始化参数数组
 $JmpArgs = @()
 $EnableDebug = $false
+$FallbackMode = 0  # 0=自动, 1=跳过ES用FD, 2=直接fallback
 
-foreach ($arg in $args) {
+$i = 0
+while ($i -lt $args.Count) {
+    $arg = $args[$i]
+    
     if ($arg -eq "-debug") {
         $EnableDebug = $true
+        $i++
+    } elseif ($arg -eq "-fallback") {
+        # 检查是否有下一个参数，且为数字
+        if ($i + 1 -lt $args.Count -and $args[$i + 1] -match '^[12]$') {
+            $FallbackMode = [int]$args[$i + 1]
+            $i += 2
+        } else {
+            # 默认：-fallback 不带参数等价于 -fallback 2
+            $FallbackMode = 2
+            $i++
+        }
     } else {
         # 强制转换为字符串，避免数字截断
         $JmpArgs += [string]$arg
+        $i++
     }
 }
 
@@ -20,10 +36,13 @@ if ($EnableDebug) {
     for ($i = 0; $i -lt $JmpArgs.Count; $i++) {
         Write-Host "Debug: Raw JmpArgs[$i]: '$($JmpArgs[$i])' (Type: $($JmpArgs[$i].GetType().Name))" -ForegroundColor Gray
     }
+    if ($FallbackMode -ne 0) {
+        Write-Host "Debug: FallbackMode = $FallbackMode" -ForegroundColor Gray
+    }
 }
 
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$VersionTag = "Beta3"
+$VersionTag = "DevelopBuild"
 
 # ========================
 # Utilities
@@ -112,17 +131,21 @@ function ConvertTo-SortableVersion {
 
 function Show-Usage {
     Write-Warning "Usage: jmp <command> [args]"
-    Write-Host ""
-    Write-Host "Commands:"
-    Write-Host "  scan                 - Discover Java installations (ES-first)"
-    Write-Host "  list                 - List all discovered Java"
-    Write-Host "  use <version> [vendor]- Switch Java version"
-    Write-Host "  current              - Show current JAVA_HOME"
-    Write-Host "  version              - Show script version"
-    Write-Host "  help                 - Show this help"
-    Write-Host ""
-    Write-Host "Options:"
-    Write-Host "  -debug               - Enable debug output"
+    Write-Info ""
+    Write-Info "Commands:"
+    Write-Info "  scan                 - Discover Java installations (PATH-ES-first, then fd, then fallback)"
+    Write-Info "  list                 - List all discovered Java"
+    Write-Info "  use <version> [vendor]- Switch Java version"
+    Write-Info "  current              - Show current JAVA_HOME"
+    Write-Info "  version              - Show script version"
+    Write-Info "  help                 - Show this help"
+    Write-Info ""
+    Write-Info "Options:"
+    Write-Info "  -debug               - Enable debug output"
+    Write-Info "  -fallback [1|2]      - Control scan fallback mode:"
+    Write-Info "                         -fallback 1 = Skip Everything, use fd (if available)"
+    Write-Info "                         -fallback 2 = Direct fallback scan (skip Everything and fd)"
+    Write-Info "                         -fallback   = Same as -fallback 2"
     Show-Header
 }
 
@@ -160,24 +183,84 @@ function Detect-Vendor($Path) {
     return $vendors[0]
 }
 
+# 输出函数定义移到合适位置（在Show-Header之后）
+function Write-Info {
+    param([string]$Message)
+    Write-Host "[INFO] $Message" -ForegroundColor Cyan
+}
+
+function Write-Success {
+    param([string]$Message)
+    Write-Host "[OK] $Message" -ForegroundColor Green
+}
+
+function Write-Warning {
+    param([string]$Message)
+    Write-Host "[WARN] $Message" -ForegroundColor Yellow
+}
+
+function Write-ErrorMsg {
+    param([string]$Message)
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
 # ========================
 # Everything (ES)
 # ========================
 
 function Get-ESPath {
-    # 首先检查PATH中的es命令
+    # 只检查 PATH 中的 es 命令
     $esCmd = Get-Command es -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-    if ($esCmd -and (Test-Path $esCmd)) {
-        return $esCmd
+    if ($esCmd -and (Test-Path $esCmd)) { return $esCmd }
+    
+    return $null
+}
+
+function Test-ESAvailable {
+    param(
+        [string]$EsExePath
+    )
+
+    if (-not (Test-Path $EsExePath)) {
+        Write-Warning "ES executable not found at $EsExePath"
+        return $false
     }
+
+    # 测试ES是否可用（通过搜索notepad.exe）
+    $maxRetries = 3
+    $retryCount = 0
     
-    # 如果PATH中没有，检查常见安装位置
-    $commonPaths = @(
-        "$env:ProgramFiles\Everything\es.exe",
-        "$env:LOCALAPPDATA\Everything\es.exe"
-    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-    
-    return $commonPaths
+    while ($retryCount -lt $maxRetries) {
+        try {
+            # 尝试搜索一个肯定存在的文件来测试ES服务
+            $testOutput = & $EsExePath "-name" "notepad.exe" "-count" "1" 2>$null
+            
+            if ($LASTEXITCODE -eq 0) {
+                # 即使没有结果，只要命令成功执行就表示服务正常
+                if ($EnableDebug) {
+                    Write-Host "Debug: ES test successful, exit code: $LASTEXITCODE" -ForegroundColor Gray
+                }
+                return $true
+            } else {
+                if ($EnableDebug) {
+                    Write-Host "Debug: ES test failed, exit code: $LASTEXITCODE" -ForegroundColor Yellow
+                }
+            }
+        } catch {
+            if ($EnableDebug) {
+                Write-Host "Debug: ES test exception: $_" -ForegroundColor Yellow
+            }
+        }
+        
+        $retryCount++
+        if ($retryCount -lt $maxRetries) {
+            Write-Info "Waiting 1 second before retry $retryCount of $maxRetries..."
+            Start-Sleep -Seconds 1
+        }
+    }
+
+    Write-Warning "ES test failed after $maxRetries attempts. Will fallback."
+    return $false
 }
 
 function Scan-Java-WithES {
@@ -186,16 +269,17 @@ function Scan-Java-WithES {
     $results = @()
 
     try {
-        # [FIX] remove double backslash, use single quotes for literal string
-        $searchQuery = 'bin\java.exe' 
+        # 使用正确的ES搜索参数
+        $searchQuery = 'java.exe'
         
         # 使用ES搜索所有java.exe文件，返回JSON格式
-        # 注意：若 es 没找到任何内容，它会返回空字符串，ConvertFrom-Json 会报错，
-        # 所以我们允许报错进入 catch 或者是处理空输出。
-        $rawOutput = & $EsPath "-json" "-count" "1000" $searchQuery 2>$null
+        $rawOutput = & $EsPath "-json" "-count" "1000" "-name" $searchQuery 2>$null
         
         if (-not $rawOutput) {
             # ES 没找到结果，或者出错了
+            if ($EnableDebug) {
+                Write-Host "Debug: ES returned no output for query: $searchQuery" -ForegroundColor Yellow
+            }
             throw "No output from ES"
         }
 
@@ -267,7 +351,7 @@ function Scan-Java-WithES {
                     versionObj = $parsedVersion
                     vendor  = $vendor
                     path    = $javaHome
-                    source  = "es-fallback"
+                    source  = "es"
                 }
             }
         } catch {
@@ -279,64 +363,148 @@ function Scan-Java-WithES {
 }
 
 # ========================
+# FD Scan (使用 fd 进行逐盘搜索)
+# ========================
+
+function Scan-Java-WithFD {
+    $results = @()
+    
+    $fdPath = Join-Path $ScriptRoot "fd.exe"
+    if (-not (Test-Path $fdPath)) {
+        Write-Warning "fd.exe not found at $fdPath. Cannot perform FD scan."
+        return $results
+    }
+    
+    Write-Info "Using fd for disk-by-disk search..."
+    
+    # 获取所有文件系统驱动器
+    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -match '^[A-Z]:\\$' } | Select-Object -ExpandProperty Root
+    
+    if (-not $drives) {
+        Write-Warning "No drives found for FD scan."
+        return $results
+    }
+    
+    if ($EnableDebug) {
+        Write-Host "Debug: Found drives: $($drives -join ', ')" -ForegroundColor Gray
+    }
+    
+    foreach ($drive in $drives) {
+        Write-Info "Searching drive $drive..."
+        
+        try {
+            # 使用 fd 搜索 java.exe 可执行文件
+            $fdOutput = & $fdPath -tx "java.exe" $drive --absolute-path 2>$null
+            
+            if ($fdOutput) {
+                foreach ($javaExe in $fdOutput) {
+                    # 确保路径以 bin\java.exe 结尾
+                    if (-not ($javaExe -match '\\bin\\java\.exe$')) { continue }
+                    
+                    $javaHome = Split-Path (Split-Path $javaExe -Parent) -Parent
+                    
+                    # 检查是否已经处理过相同的 javaHome（去重）
+                    if ($results.path -contains $javaHome) { continue }
+                    
+                    $release = Join-Path $javaHome "release"
+                    
+                    if (-not (Test-Path $release)) { continue }
+                    
+                    $verLine = Get-Content $release -ErrorAction SilentlyContinue |
+                        Where-Object { $_ -like 'JAVA_VERSION=*' }
+                    
+                    if (-not $verLine) { continue }
+                    
+                    $version = ($verLine -split '"')[1].Trim('"')
+                    $vendor = Detect-Vendor $javaHome
+                    $parsedVersion = Parse-JavaVersion $version
+                    
+                    $results += [pscustomobject]@{
+                        name    = Split-Path $javaHome -Leaf
+                        version = $version
+                        versionObj = $parsedVersion
+                        vendor  = $vendor
+                        path    = $javaHome
+                        source  = "fd"
+                    }
+                }
+            }
+        } catch {
+            Write-Warning "Error scanning drive $drive with fd: $_"
+        }
+    }
+    
+    return $results
+}
+
+# ========================
 # Fallback Scan
 # ========================
 
 function Scan-Java-Fallback {
+    $results = @()
     $candidates = @()
 
-    if ($env:JAVA_HOME) {
-        $candidates += $env:JAVA_HOME
-    }
-
+    # 1. PATH 下的 java.exe
     try {
-        $javaPaths = where java 2>$null
-        if ($javaPaths) {
-            $javaPaths | ForEach-Object {
-                $candidates += Split-Path (Split-Path $_ -Parent) -Parent
+        $cmds = Get-Command java -ErrorAction SilentlyContinue
+        foreach ($c in $cmds) {
+            if ($c.Source) {
+                $javaHome = Split-Path (Split-Path $c.Source -Parent) -Parent
+                $candidates += $javaHome
             }
         }
     } catch {}
 
-    $knownRoots = @(
+    # 2. 常见目录
+    $commonRoots = @(
         "$env:ProgramFiles\Java",
-        "D:\Program Files\Java"
+        "$env:ProgramFiles(x86)\Java",
+        "$env:LOCALAPPDATA\Programs\Java",
+        "$env:USERPROFILE\.jdks"
     ) | Where-Object { Test-Path $_ }
 
-    foreach ($root in $knownRoots) {
-        $subdirs = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue
-        if ($subdirs) {
-            $subdirs | ForEach-Object { $candidates += $_.FullName }
-        }
+    foreach ($root in $commonRoots) {
+        try {
+            $dirs = Get-ChildItem $root -Directory -ErrorAction SilentlyContinue
+            foreach ($d in $dirs) {
+                # 只要 bin\java.exe 存在，就加入
+                $javaExe = Join-Path $d.FullName "bin\java.exe"
+                if (Test-Path $javaExe) {
+                    $candidates += $d.FullName
+                }
+            }
+        } catch {}
     }
 
-    $results = @()
+    # 去重
+    $candidates = $candidates | Sort-Object -Unique
 
-    $candidates | Sort-Object -Unique | ForEach-Object {
-        $javaHome = $_
-        if (-not (Test-Path (Join-Path $javaHome "bin\java.exe"))) { return }
-        if (-not (Test-Path (Join-Path $javaHome "release"))) { return }
+    # 构建结果对象
+    foreach ($javaHome in $candidates) {
+        $javaExe = Join-Path $javaHome "bin\java.exe"
+        if (-not (Test-Path $javaExe)) { continue }
 
-        $verLine = Get-Content (Join-Path $javaHome "release") -ErrorAction SilentlyContinue |
-            Where-Object { $_ -like 'JAVA_VERSION=*' }
+        # 尝试获取版本
+        $ver = ""
+        try {
+            $verLine = & $javaExe -version 2>&1 | Select-Object -First 1
+            if ($verLine -match '"([\d._]+)"') { $ver = $matches[1] }
+        } catch {}
 
-        if (-not $verLine) { return }
-
-        $version = ($verLine -split '"')[1].Trim('"')
-        $parsedVersion = Parse-JavaVersion $version
-        
         $results += [pscustomobject]@{
-            name    = Split-Path $javaHome -Leaf
-            version = $version
-            versionObj = $parsedVersion
-            vendor  = Detect-Vendor $javaHome
-            path    = $javaHome
-            source  = "fallback"
+            name = Split-Path $javaHome -Leaf
+            version = $ver
+            versionObj = Parse-JavaVersion $ver
+            vendor = Detect-Vendor $javaHome
+            path = $javaHome
+            source = "fallback"
         }
     }
 
     return $results
 }
+
 
 # ========================
 # Scan (Controller)
@@ -344,43 +512,72 @@ function Scan-Java-Fallback {
 
 function Scan-Java {
     $results = @()
-    $es = Get-ESPath
-
-    if ($es) {
-        if ($EnableDebug) { Write-Info "Using Everything (ES) for scanning" }
-        $results = Scan-Java-WithES $es
-    } else {
-        if ($EnableDebug) { Write-Warning "Everything not found, using fallback scan" }
-        $results = Scan-Java-Fallback
-    }
-
-    # 在保存前转换versionObj为可序列化的对象
-    $serializableResults = @()
-    foreach ($item in $results) {
-        $serializableItem = [ordered]@{
-            name = $item.name
-            version = $item.version
-            versionObj = @{
-                original = $item.versionObj.original
-                major = $item.versionObj.major
-                minor = $item.versionObj.minor
-                patch = $item.versionObj.patch
-                build = $item.versionObj.build
-                isJava8 = $item.versionObj.isJava8
-            }
-            vendor = $item.vendor
-            path = $item.path
-            source = $item.source
+    
+    # 根据 FallbackMode 决定扫描策略
+    if ($FallbackMode -eq 2) {
+        # -fallback 2: 直接使用 fallback（跳过 ES 和 FD）
+        if ($EnableDebug) {
+            Write-Info "FallbackMode 2: Direct fallback scan, skipping Everything and fd"
         }
-        $serializableResults += $serializableItem
+        $results = Scan-Java-Fallback
+    } elseif ($FallbackMode -eq 1) {
+        # -fallback 1: 跳过 ES，尝试使用 FD，如果不可用则使用 fallback
+        if ($EnableDebug) {
+            Write-Info "FallbackMode 1: Skip Everything, try fd, then fallback"
+        }
+        $results = Invoke-FallbackScan
+    } else {
+        # FallbackMode 0: 自动模式（默认）
+        # 1. 检查 PATH 中是否有 es
+        if ($esPath = Get-ESPath) {
+            if ($EnableDebug) {
+                Write-Info "Found es in PATH: $esPath"
+            }
+            
+            # 测试 ES 是否可用
+            if (Test-ESAvailable $esPath) {
+                Write-Info "Everything (ES) is available, using ES for scanning"
+                $results = Scan-Java-WithES $esPath
+            } else {
+                Write-Warning "ES test failed, falling back to fd or fallback"
+                # 降级：尝试使用 fd，如果不可用则使用 fallback
+                $results = Invoke-FallbackScan
+            }
+        } else {
+            # PATH 中没有 es，尝试使用 fd
+            if ($EnableDebug) {
+                Write-Info "es not found in PATH, trying fd"
+            }
+            $results = Invoke-FallbackScan
+        }
     }
     
-    Save-Json (Join-Path $ScriptRoot "java-versions.json") $serializableResults
+    # 保存结果到 JSON 文件
+    if ($results) {
+        Save-Json (Join-Path $ScriptRoot "java-versions.json") $results
+    }
+    
     Write-Success "Scan completed. Found $($results.Count) Java installations."
     if ($results.Count -gt 0) {
         $results | ForEach-Object { Write-Info "  - $($_.version) ($($_.vendor)) at $($_.path)" }
     }
 }
+
+# 辅助函数：尝试使用 fd，如果不可用则使用 fallback
+function Invoke-FallbackScan {
+    $fdPath = Join-Path $ScriptRoot "fd.exe"
+    if (Test-Path $fdPath) {
+        if ($EnableDebug) { Write-Info "Using fd for disk-by-disk scan" }
+        return Scan-Java-WithFD
+    } else {
+        if ($EnableDebug) { Write-Info "fd.exe not found, using fallback scan" }
+        return Scan-Java-Fallback
+    }
+}
+
+# ========================
+# List
+# ========================
 
 function List-Java {
     $data = Load-Json (Join-Path $ScriptRoot "java-versions.json")
@@ -412,6 +609,10 @@ function List-Java {
         Format-Table version, vendor, name, source -AutoSize
 }
 
+# ========================
+# Current
+# ========================
+
 function Show-Current {
     if ($env:JAVA_HOME) {
         Write-Info "JAVA_HOME=$env:JAVA_HOME"
@@ -429,77 +630,6 @@ function Show-Current {
     } else {
         Write-Warning "JAVA_HOME not set."
     }
-}
-
-function Show-Usage {
-    Write-Warning "Usage: jmp <command> [args]"
-    Write-Info ""
-    Write-Info "Commands:"
-    Write-Info "  scan                 - Discover Java installations (ES-first)"
-    Write-Info "  list                 - List all discovered Java"
-    Write-Info "  use <version> [vendor]- Switch Java version"
-    Write-Info "  current              - Show current JAVA_HOME"
-    Write-Info "  version              - Show script version"
-    Write-Info "  help                 - Show this help"
-    Write-Info ""
-    Write-Info "Options:"
-    Write-Info "  -debug               - Enable debug output"
-    Show-Header
-}
-
-# 将输出函数定义移到脚本开头（在Show-Header之后）
-function Write-Info {
-    param([string]$Message)
-    Write-Host "[INFO] $Message" -ForegroundColor Cyan
-}
-
-function Write-Success {
-    param([string]$Message)
-    Write-Host "[OK] $Message" -ForegroundColor Green
-}
-
-function Write-Warning {
-    param([string]$Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
-}
-
-function Write-ErrorMsg {
-    param([string]$Message)
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
-}
-
-# ========================
-# List
-# ========================
-
-function List-Java {
-    $data = Load-Json (Join-Path $ScriptRoot "java-versions.json")
-    if (-not $data) {
-        Write-Warning "No scan data found. Run 'jmp scan' first."
-        return
-    }
-
-    if ($data.Count -eq 0) {
-        Write-Host "No Java installations found. Please run 'jmp scan' to discover Java installations."
-        return
-    }
-
-    Write-Host "Available Java installations:"
-    $data |
-        Sort-Object { 
-            if ($_.versionObj -and $_.versionObj.major -ne $null) {
-                # 使用解析后的版本对象进行排序
-                $major = $_.versionObj.major
-                $minor = $_.versionObj.minor
-                $patch = $_.versionObj.patch
-                # 创建可排序的字符串
-                "{0:D4}.{1:D4}.{2:D4}" -f $major, $minor, $patch
-            } else {
-                # 回退到原始版本字符串
-                $_.version
-            }
-        } |
-        Format-Table version, vendor, name, source -AutoSize
 }
 
 # ========================
@@ -707,29 +837,6 @@ function Use-Java {
 }
 
 # ========================
-# Current
-# ========================
-
-function Show-Current {
-    if ($env:JAVA_HOME) {
-        Write-Host "JAVA_HOME=$env:JAVA_HOME"
-        try {
-            $javaCmd = "$env:JAVA_HOME\bin\java.exe"
-            if (Test-Path $javaCmd) {
-                $javaVersion = & $javaCmd -version 2>&1
-                Write-Host "Java version: $javaVersion"
-            } else {
-                Write-Warning "Java executable not found at: $javaCmd"
-            }
-        } catch {
-            Write-Warning "Java not accessible at $env:JAVA_HOME"
-        }
-    } else {
-        Write-Warning "JAVA_HOME not set."
-    }
-}
-
-# ========================
 # 命令分发
 # ========================
 
@@ -766,24 +873,4 @@ switch ($Command) {
         Write-Warning "Unknown command: $Command"
         Show-Usage
     }
-}
-
-function Write-Info {
-    param([string]$Message)
-    Write-Host "[INFO] $Message" -ForegroundColor Cyan
-}
-
-function Write-Success {
-    param([string]$Message)
-    Write-Host "[OK] $Message" -ForegroundColor Green
-}
-
-function Write-Warning {
-    param([string]$Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
-}
-
-function Write-ErrorMsg {
-    param([string]$Message)
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
