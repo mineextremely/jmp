@@ -8,6 +8,7 @@
 - **自动下载工具**：自动下载并安装 fd 工具以提升扫描速度
 - **智能供应商识别**：自动识别 Java 发行版供应商（Temurin、Zulu、Oracle、GraalVM、Liberica、Corretto 等）
 - **版本切换**：快速切换到指定的 Java 版本和供应商
+- **持久化固定**：支持将 Java 版本持久化固定到用户或系统环境
 - **版本模糊匹配**：支持多种版本格式和模糊匹配
 - **供应商优先级**：支持配置不同供应商的优先级
 - **跨版本兼容**：兼容 PowerShell 5.1 和 PowerShell 7+
@@ -45,6 +46,21 @@ jmp use 17
 
 # 切换到 Temurin 版本的 Java 17
 jmp use 17 temurin
+
+# 清除当前会话的 Java 设置
+jmp unuse
+
+# 固定 Java 21 到用户环境
+jmp pin 21
+
+# 固定 Temurin Java 21 到系统环境（需要管理员权限）
+jmp pin 21 temurin system
+
+# 移除用户环境的固定设置
+jmp unpin
+
+# 移除系统环境的固定设置（需要管理员权限）
+jmp unpin system
 
 # 显示当前激活的 Java 版本
 jmp current
@@ -100,12 +116,47 @@ version   vendor   name                              source
 
 ### use
 
-切换到指定的 Java 版本
+切换到指定的 Java 版本（仅当前会话有效）
 
 ```bash
 jmp use 17                  # 切换到 Java 17（使用优先级最高的供应商）
 jmp use 17 temurin          # 切换到 Temurin 版本的 Java 17
 jmp use 8                   # 切换到 Java 8
+```
+
+### unuse
+
+清除当前会话的 Java 设置
+
+```bash
+jmp unuse                   # 清除当前会话的 JAVA_HOME 和 PATH 中的 Java 路径
+```
+
+### pin
+
+持久化固定 Java 版本到用户或系统环境
+
+```bash
+jmp pin 21                  # 固定 Java 21 到用户环境（默认）
+jmp pin 21 user            # 固定 Java 21 到用户环境
+jmp pin 21 system          # 固定 Java 21 到系统环境（需要管理员权限）
+jmp pin 21 temurin         # 固定 Temurin Java 21 到用户环境
+jmp pin 21 temurin system  # 固定 Temurin Java 21 到系统环境
+```
+
+**说明**：
+- `pin` 命令会将 Java 版本持久化到环境变量，新打开的终端会话会自动使用该版本
+- 系统级设置需要管理员权限
+- 更改会在新终端会话中生效
+
+### unpin
+
+移除持久化的 Java 设置
+
+```bash
+jmp unpin                   # 移除用户环境的固定设置
+jmp unpin user             # 移除用户环境的固定设置
+jmp unpin system           # 移除系统环境的固定设置（需要管理员权限）
 ```
 
 ### current
@@ -159,7 +210,10 @@ jmp/
 │   │   ├── Current.ps1        # 显示当前 Java 版本
 │   │   ├── Help.ps1           # 显示帮助信息
 │   │   ├── List.ps1           # 列出所有 Java 安装
+│   │   ├── Pin.ps1            # 固定 Java 版本
 │   │   ├── Scan.ps1           # 扫描 Java 安装
+│   │   ├── Unpin.ps1          # 移除固定的 Java 版本
+│   │   ├── Unuse.ps1          # 清除当前会话的 Java 设置
 │   │   ├── Use.ps1            # 切换 Java 版本
 │   │   └── Version.ps1        # 显示版本信息
 │   ├── core/                  # 核心模块
@@ -217,10 +271,13 @@ JMP 支持自动下载 fd 工具以提升扫描速度：
 
 ## 注意事项
 
-1. **环境变量作用域**：`jmp.ps1` 修改的环境变量仅在当前 PowerShell 会话中有效
+1. **环境变量作用域**：
+   - `use` 命令修改的环境变量仅在当前 PowerShell 会话中有效
+   - `pin` 命令会将环境变量持久化到用户或系统环境，新终端会话会自动使用该版本
 2. **Everything 服务**：ES 服务需要正常运行才能使用 Everything 搜索功能
 3. **PowerShell 版本**：支持 PowerShell 5.1 和 PowerShell 7+
 4. **文件编码**：所有 PowerShell 脚本使用 UTF-8 编码
+5. **管理员权限**：系统级 `pin` 和 `unpin` 操作需要管理员权限
 
 ## 开发
 
@@ -248,6 +305,16 @@ MIT License
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.1.0
+
+- ✅ 新增 `pin` 命令：持久化固定 Java 版本到用户或系统环境
+- ✅ 新增 `unpin` 命令：移除持久化的 Java 设置
+- ✅ 新增 `unuse` 命令：清除当前会话的 Java 设置
+- ✅ 支持用户级和系统级环境变量设置
+- ✅ 系统级设置需要管理员权限验证
+- ✅ 自动移除旧的 Java bin 路径，避免 PATH 污染
+- ✅ 通知系统环境变量已更改（仅系统级）
 
 ### v1.0.0
 

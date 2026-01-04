@@ -55,6 +55,15 @@ if ($JmpArgs.Count -eq 0) {
     elseif ($Command -eq "use") {
         Invoke-Use $ctx
     }
+    elseif ($Command -eq "unuse") {
+        Invoke-Unuse $ctx
+    }
+    elseif ($Command -eq "pin") {
+        Invoke-Pin $ctx
+    }
+    elseif ($Command -eq "unpin") {
+        Invoke-Unpin $ctx
+    }
     elseif ($Command -eq "current") {
         Invoke-Current $ctx
     }
