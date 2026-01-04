@@ -2,8 +2,6 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . "$Root/src/core/Bootstrap.ps1"
 
-Show-Header
-
 $JmpArgs = @()
 $EnableDebug = $false
 $FallbackMode = 0
@@ -69,4 +67,8 @@ if ($JmpArgs.Count -eq 0) {
     else {
         Invoke-Help $ctx
     }
+}
+
+if ($EnableDebug) {
+    Show-Header
 }

@@ -4,11 +4,13 @@
 
 ## 功能特性
 
-- **扫描 Java 安装**：支持多种扫描策略（Everything 搜索工具、常见目录扫描）
-- **列出可用版本**：显示所有已发现的 Java 安装
-- **切换 Java 版本**：快速切换到指定的 Java 版本和供应商
-- **显示当前版本**：查看当前激活的 JAVA_HOME 和 Java 版本
-- **供应商优先级**：支持配置不同供应商的优先级（Temurin、Zulu、Oracle、GraalVM）
+- **多种扫描策略**：支持 Everything (ES)、fd 工具、常见目录扫描三种模式
+- **自动下载工具**：自动下载并安装 fd 工具以提升扫描速度
+- **智能供应商识别**：自动识别 Java 发行版供应商（Temurin、Zulu、Oracle、GraalVM、Liberica、Corretto 等）
+- **版本切换**：快速切换到指定的 Java 版本和供应商
+- **版本模糊匹配**：支持多种版本格式和模糊匹配
+- **供应商优先级**：支持配置不同供应商的优先级
+- **跨版本兼容**：兼容 PowerShell 5.1 和 PowerShell 7+
 
 ## 技术栈
 
@@ -58,15 +60,24 @@ jmp help
 
 ### scan
 
-扫描系统中的 Java 安装，支持两种模式：
+扫描系统中的 Java 安装，支持三种模式：
 
-- **自动模式（默认）**：优先使用 Everything (ES)，失败后使用常见目录扫描
-- **-fallback**：直接使用常见目录扫描
+- **自动模式（默认）**：优先使用 Everything (ES)，失败后尝试 fd，最后使用常见目录扫描
+- **-fallback 1**：跳过 Everything，尝试使用 fd，失败后使用常见目录扫描
+- **-fallback 2**：直接使用常见目录扫描
 
 ```bash
 jmp scan                    # 自动扫描
-jmp scan -fallback          # 使用 fallback 扫描
+jmp scan -fallback 1        # 跳过 ES，使用 fd 或 fallback
+jmp scan -fallback 2        # 直接使用 fallback 扫描
+jmp scan -debug             # 启用调试输出
 ```
+
+**扫描策略说明**：
+
+1. **Everything (ES)**：最快的扫描方式，需要 Everything 服务正常运行
+2. **fd 工具**：快速文件搜索工具，如果不存在会自动询问是否下载
+3. **Fallback 扫描**：扫描常见 Java 安装目录和 PATH
 
 ### list
 
@@ -74,6 +85,17 @@ jmp scan -fallback          # 使用 fallback 扫描
 
 ```bash
 jmp list
+```
+
+输出示例：
+```
+version   vendor   name                              source
+-------   ------   ----                              ------
+1.8.0_451 oracle   jdk-8u451                         es
+1.8.0_472 temurin  jdk8u472-b08                      es
+17.0.17   temurin  jdk-17.0.17+10                    es
+21.0.9    temurin  jdk-21.0.9+10                     es
+25.0.1    zulu     zulu25.30.17-ca-jdk25.0.1-win_x64 es
 ```
 
 ### use
@@ -161,10 +183,15 @@ jmp/
 
 ## 支持的供应商
 
-- **Temurin** (Adoptium)
-- **Zulu**
-- **Oracle**
+JMP 支持以下 Java 发行版供应商的自动识别：
+
+- **Temurin** (Eclipse Adoptium)
+- **Zulu** (Azul Systems)
+- **Oracle** (Oracle JDK)
 - **GraalVM**
+- **Liberica** (BellSoft)
+- **Corretto** (Amazon)
+- **Microsoft** (Microsoft OpenJDK)
 - **Unknown** (其他供应商)
 
 ## 版本匹配
@@ -178,10 +205,22 @@ JMP 支持多种版本格式的匹配：
 
 支持模糊匹配，例如输入 `17` 可以匹配所有 17.x.x 版本。
 
+## 工具下载
+
+### fd 工具
+
+JMP 支持自动下载 fd 工具以提升扫描速度：
+
+- 下载源优先级：jsDelivr CDN → ghproxy → GitHub 原始链接
+- 自动解压并安装到项目根目录
+- 支持用户选择是否下载
+
 ## 注意事项
 
 1. **环境变量作用域**：`jmp.ps1` 修改的环境变量仅在当前 PowerShell 会话中有效
 2. **Everything 服务**：ES 服务需要正常运行才能使用 Everything 搜索功能
+3. **PowerShell 版本**：支持 PowerShell 5.1 和 PowerShell 7+
+4. **文件编码**：所有 PowerShell 脚本使用 UTF-8 编码
 
 ## 开发
 
@@ -190,6 +229,15 @@ JMP 支持多种版本格式的匹配：
 - **函数命名**：使用 PascalCase，动词-名词格式（如 `Invoke-Scan`、`Parse-JavaVersion`）
 - **变量命名**：使用 PascalCase（如 `$ScriptRoot`、`$EnableDebug`）
 - **文件命名**：使用 PascalCase（如 `Args.ps1`、`Vendor.ps1`）
+- **文件编码**：所有 .ps1 文件使用 UTF-8 编码
+
+### 调试模式
+
+使用 `-debug` 参数启用调试输出：
+
+```bash
+jmp -debug scan
+```
 
 ## 许可证
 
@@ -198,3 +246,15 @@ MIT License
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
+
+## 更新日志
+
+### v1.0.0
+
+- ✅ 实现三种扫描策略（Everything、fd、fallback）
+- ✅ 自动下载 fd 工具
+- ✅ 智能供应商识别（支持 7+ 种供应商）
+- ✅ 版本模糊匹配
+- ✅ 供应商优先级配置
+- ✅ PowerShell 5.1 和 7+ 兼容
+- ✅ 模块化架构设计
