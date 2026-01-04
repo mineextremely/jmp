@@ -2,6 +2,7 @@ java-versions.json
 jmp.origin.ps1
 IFLOW.md
 debug.txt
+test_*.ps1
 new.txt
 fd-v*/
 fd.exe
