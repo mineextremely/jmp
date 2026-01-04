@@ -1,15 +1,15 @@
 function Invoke-Use {
     param($Ctx)
 
-    if ($Ctx.Params.Count -lt 1) {
+    if ($Ctx.Args.Count -lt 2) {
         Write-Warning "Usage: jmp use <version> [vendor]"
         return
     }
 
-    $version = $Ctx.Params[0]
-    $vendor  = if ($Ctx.Params.Count -ge 2) { $Ctx.Params[1] } else { $null }
+    $version = $Ctx.Args[1]
+    $vendor = if ($Ctx.Args.Count -ge 3) { $Ctx.Args[2] } else { $null }
 
-    if ($Global:JmpDebug) { 
+    if ($Global:JmpDebug) {
         Log-Debug "Calling Find-Java with version '$version' and vendor '$vendor'"
     }
 

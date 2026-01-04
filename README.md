@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- **扫描 Java 安装**：支持多种扫描策略（Everything 搜索工具、fd 工具、常见目录扫描）
+- **扫描 Java 安装**：支持多种扫描策略（Everything 搜索工具、常见目录扫描）
 - **列出可用版本**：显示所有已发现的 Java 安装
 - **切换 Java 版本**：快速切换到指定的 Java 版本和供应商
 - **显示当前版本**：查看当前激活的 JAVA_HOME 和 Java 版本
@@ -58,14 +58,14 @@ jmp help
 
 ### scan
 
-扫描系统中的 Java 安装，支持三种模式：
+扫描系统中的 Java 安装，支持两种模式：
 
-- **自动模式（默认）**：优先使用 Everything (ES)，失败后尝试 fd，最后使用常见目录扫描
-- **-fallback 1**：跳过 ES，直接使用 fd，失败后使用常见目录扫描
-- **-fallback 2**：直接使用常见目录扫描
+- **自动模式（默认）**：优先使用 Everything (ES)，失败后使用常见目录扫描
+- **-fallback**：直接使用常见目录扫描
 
 ```bash
 jmp scan                    # 自动扫描
+jmp scan -fallback          # 使用 fallback 扫描
 ```
 
 ### list
@@ -181,8 +181,7 @@ JMP 支持多种版本格式的匹配：
 ## 注意事项
 
 1. **环境变量作用域**：`jmp.ps1` 修改的环境变量仅在当前 PowerShell 会话中有效
-2. **fd 工具**：fd.exe 需要放置在项目根目录，否则将自动降级到 fallback 扫描
-3. **Everything 服务**：ES 服务需要正常运行才能使用 Everything 搜索功能
+2. **Everything 服务**：ES 服务需要正常运行才能使用 Everything 搜索功能
 
 ## 开发
 

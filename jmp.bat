@@ -1,2 +1,4 @@
 @echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "D:\Tools\jmp\jmp.ps1" %*
+setlocal
+set SCRIPT_DIR=%~dp0
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%jmp.ps1" %*
