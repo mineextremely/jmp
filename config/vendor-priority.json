@@ -1,0 +1,3 @@
+{
+  "priority": ["temurin", "zulu", "oracle", "graalvm", "unknown"]
+}
