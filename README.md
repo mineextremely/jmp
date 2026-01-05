@@ -207,15 +207,15 @@ jmp/
 │   └── vendor-priority.json   # 供应商优先级配置
 ├── src/
 │   ├── commands/              # 命令实现模块
-│   │   ├── Current.ps1        # 显示当前 Java 版本
-│   │   ├── Help.ps1           # 显示帮助信息
-│   │   ├── List.ps1           # 列出所有 Java 安装
-│   │   ├── Pin.ps1            # 固定 Java 版本
-│   │   ├── Scan.ps1           # 扫描 Java 安装
-│   │   ├── Unpin.ps1          # 移除固定的 Java 版本
-│   │   ├── Unuse.ps1          # 清除当前会话的 Java 设置
-│   │   ├── Use.ps1            # 切换 Java 版本
-│   │   └── Version.ps1        # 显示版本信息
+│   │   ├── Invoke-Current.ps1 # 显示当前 Java 版本
+│   │   ├── Invoke-Help.ps1    # 显示帮助信息
+│   │   ├── Invoke-List.ps1    # 列出所有 Java 安装
+│   │   ├── Invoke-Pin.ps1     # 固定 Java 版本
+│   │   ├── Invoke-Scan.ps1    # 扫描 Java 安装
+│   │   ├── Invoke-Unpin.ps1   # 移除固定的 Java 版本
+│   │   ├── Invoke-Unuse.ps1   # 清除当前会话的 Java 设置
+│   │   ├── Invoke-Use.ps1     # 切换 Java 版本
+│   │   └── Invoke-Version.ps1 # 显示版本信息
 │   ├── core/                  # 核心模块
 │   │   ├── Args.ps1           # 参数解析
 │   │   ├── Bootstrap.ps1      # 模块加载引导
@@ -228,7 +228,7 @@ jmp/
 │   ├── java/                  # Java 相关功能
 │   │   ├── Find.ps1           # Java 查找函数
 │   │   ├── Match.ps1          # 版本匹配函数
-│   │   ├── Scan.ps1           # Java 扫描函数
+│   │   ├── Scanner.ps1        # Java 扫描函数
 │   │   └── Vendor.ps1         # 供应商检测
 │   └── util/
 │       └── Fs.ps1             # 文件系统工具（JSON 读写）
