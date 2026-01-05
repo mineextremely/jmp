@@ -3,6 +3,13 @@ function Invoke-Use {
 
     if ($Ctx.Args.Count -lt 2) {
         Write-Warning "Usage: jmp use <version> [vendor]"
+        Write-Info "  version: Java version to use (e.g., 17, 21)"
+        Write-Info "  vendor:  Optional vendor name (e.g., temurin, zulu)"
+        Write-Info ""
+        Write-Info "Examples:"
+        Write-Info "  jmp use 21           # Use Java 21 (highest priority vendor)"
+        Write-Info "  jmp use 21 temurin   # Use Temurin Java 21"
+        Write-Info "  jmp use 8            # Use Java 8"
         return
     }
 

@@ -64,9 +64,10 @@ function Set-PersistentJavaEnvironment {
     }
 
     try {
-        [Environment]::SetEnvironmentVariable("JAVA_HOME", $Java.Path, $Scope)
+        $target = if ($Scope -eq "system") { [EnvironmentVariableTarget]::Machine } else { [EnvironmentVariableTarget]::User }
+        [Environment]::SetEnvironmentVariable("JAVA_HOME", $Java.Path, $target)
 
-        $currentPath = [Environment]::GetEnvironmentVariable("PATH", $Scope)
+        $currentPath = [Environment]::GetEnvironmentVariable("PATH", $target)
         $newJavaBin = "$($Java.Path)\bin"
         
         $pathParts = $currentPath -split ';'
@@ -79,7 +80,7 @@ function Set-PersistentJavaEnvironment {
         }
         
         $newPath = "$newJavaBin;" + ($filteredParts -join ';')
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, $Scope)
+        [Environment]::SetEnvironmentVariable("PATH", $newPath, $target)
 
         if ($Scope -eq "system") {
             $result = [IntPtr]::Zero
@@ -116,9 +117,10 @@ function Remove-PersistentJavaEnvironment {
     }
 
     try {
-        [Environment]::SetEnvironmentVariable("JAVA_HOME", $null, $Scope)
+        $target = if ($Scope -eq "system") { [EnvironmentVariableTarget]::Machine } else { [EnvironmentVariableTarget]::User }
+        [Environment]::SetEnvironmentVariable("JAVA_HOME", $null, $target)
 
-        $currentPath = [Environment]::GetEnvironmentVariable("PATH", $Scope)
+        $currentPath = [Environment]::GetEnvironmentVariable("PATH", $target)
         if ($currentPath) {
             $pathParts = $currentPath -split ';'
             $filteredParts = @()
@@ -130,7 +132,7 @@ function Remove-PersistentJavaEnvironment {
             }
             
             $newPath = $filteredParts -join ';'
-            [Environment]::SetEnvironmentVariable("PATH", $newPath, $Scope)
+            [Environment]::SetEnvironmentVariable("PATH", $newPath, $target)
         }
 
         if ($Scope -eq "system") {

@@ -8,7 +8,7 @@
         Write-Info "  scope:   Optional scope, 'user' (default) or 'system'"
         Write-Info ""
         Write-Info "Examples:"
-        Write-Info "  jmp pin 21                  # Pin Java 21 to user environment"
+        Write-Info "  jmp pin 21                 # Pin Java 21 to user environment"
         Write-Info "  jmp pin 21 user            # Pin Java 21 to user environment"
         Write-Info "  jmp pin 21 system          # Pin Java 21 to system environment"
         Write-Info "  jmp pin 21 temurin         # Pin Temurin Java 21 to user environment"

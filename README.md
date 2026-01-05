@@ -285,7 +285,9 @@ JMP 支持自动下载 fd 工具以提升扫描速度：
 
 - **函数命名**：使用 PascalCase，动词-名词格式（如 `Invoke-Scan`、`Parse-JavaVersion`）
 - **变量命名**：使用 PascalCase（如 `$ScriptRoot`、`$EnableDebug`）
-- **文件命名**：使用 PascalCase（如 `Args.ps1`、`Vendor.ps1`）
+- **文件命名**：
+  - 命令层：使用 `Invoke-` 前缀（如 `Invoke-Scan.ps1`）
+  - 核心层：使用 PascalCase（如 `Scanner.ps1`、`Vendor.ps1`）
 - **文件编码**：所有 .ps1 文件使用 UTF-8 编码
 
 ### 调试模式
@@ -305,6 +307,14 @@ MIT License
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.1.1
+
+- ✅ 重构文件命名：commands 层文件统一使用 `Invoke-` 前缀
+- ✅ 重构文件命名：java 层的 `Scan.ps1` 重命名为 `Scanner.ps1`
+- ✅ 优化帮助信息：简化 `jmp help` 输出，为 `jmp use` 添加详细帮助
+- ✅ 修复环境变量设置：修复 `pin` 和 `unpin` 命令的 EnvironmentVariableTarget 枚举值错误
+- ✅ 改进用户体验：命令帮助信息更加平衡和清晰
 
 ### v1.1.0
 
