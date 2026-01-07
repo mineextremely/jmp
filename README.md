@@ -308,6 +308,14 @@ MIT License
 
 ## 更新日志
 
+### v1.1.2
+
+- ✅ 修复 ES 扫描功能：添加 `-full-path-and-name` 参数以获取完整路径
+- ✅ 修复 JSON 解析问题：正确处理 PowerShell ConvertFrom-Json 返回的数组结构
+- ✅ 修复字段访问错误：使用 `filename` 字段而不是 `name` 字段
+- ✅ 修复非管理员环境下的扫描问题：`jmp -debug scan` 现在可以正常工作
+- ✅ 提升扫描稳定性：通过修复 ES 集成问题，显著提高扫描可靠性
+
 ### v1.1.1
 
 - ✅ 重构文件命名：commands 层文件统一使用 `Invoke-` 前缀
