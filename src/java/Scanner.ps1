@@ -186,9 +186,9 @@ function Scan-Java-WithES {
     try {
         # 使用正确的ES搜索参数
         $searchQuery = 'java.exe'
-        
-        # 使用ES搜索所有java.exe文件，返回JSON格式
-        $rawOutput = & $EsPath "-json" "-count" "1000" "-name" $searchQuery 2>$null
+
+        # 使用ES搜索所有java.exe文件，返回JSON格式，包含完整路径
+        $rawOutput = & $EsPath "-json" "-count" "1000" "-full-path-and-name" "-name" $searchQuery 2>$null
         
         if (-not $rawOutput) {
             # ES 没找到结果，或者出错了
@@ -210,12 +210,26 @@ function Scan-Java-WithES {
             Log-Debug "Parsed ES output type: $($esOutput.GetType().Name)"
             Log-Debug "Parsed ES output count: $($esOutput.Count)"
         }
-        
-        foreach ($item in $esOutput) {
+
+        # ConvertFrom-Json 返回的是直接数组，不需要访问 .value 属性
+        $fileList = $esOutput
+
+        if ($Global:JmpDebug) {
+            Log-Debug "File list type: $($fileList.GetType().Name)"
+            Log-Debug "File list count: $($fileList.Count)"
+        }
+
+        foreach ($item in $fileList) {
+            # ES 返回的字段是 filename（完整路径）
             $javaExe  = $item.filename
-            
+
             # [Safety] 确保路径有效且确实是 bin\java.exe 结尾
-            if (-not ($javaExe -match 'bin\\java\.exe$')) { continue }
+            if (-not ($javaExe -match 'bin\\java\.exe$')) {
+                if ($Global:JmpDebug) {
+                    Log-Debug "Skipping non-bin path: $javaExe"
+                }
+                continue
+            }
 
             $javaHome = Split-Path (Split-Path $javaExe -Parent) -Parent
             $release  = Join-Path $javaHome "release"
