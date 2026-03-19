@@ -22,9 +22,10 @@ function Invoke-Help {
     Write-Info "  jmp pin 21 system     # Pin Java 21 to system (needs admin)"
     Write-Info ""
     Write-Info "Options:"
-    Write-Info "  -debug  - Enable debug output"
-    Write-Info "  -light  - Use light scan mode (fast, no external dependencies)"
-    Write-Info "  -deep   - Use deep scan mode (comprehensive, requires fd.exe)"
+    Write-Info "  -debug                  - Enable debug output"
+    Write-Info "  -light                  - Use light scan mode (fast, no external dependencies)"
+    Write-Info "  -deep                   - Use deep scan mode (comprehensive, requires fd.exe)"
+    Write-Info "  -no-parallel-download  - Disable parallel download for fd (slower but more stable)"
     Write-Info ""
     Write-Info "Run 'jmp <command>' without args for command-specific help"
     Show-Header
