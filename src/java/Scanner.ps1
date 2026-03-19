@@ -91,7 +91,101 @@ function Get-FdDownloadUrl {
     }
 }
 
+function Download-FileParallel {
+    param(
+        [string[]]$Urls,
+        [string]$OutputPath,
+        [int]$TimeoutSeconds = 60
+    )
+    
+    if ($Global:JmpDebug) {
+        Log-Debug "Starting parallel download from $($Urls.Count) sources"
+    }
+    
+    $webClient = New-Object System.Net.WebClient
+    $tasks = @()
+    $completed = $false
+    $successUrl = $null
+    
+    # 为每个 URL 创建下载任务
+    foreach ($url in $Urls) {
+        $tempFile = "$OutputPath.temp.$([Guid]::NewGuid())"
+        $task = @{
+            Url = $url
+            TempFile = $tempFile
+            AsyncResult = $null
+        }
+        
+        try {
+            $task.AsyncResult = $webClient.DownloadFileTaskAsync($url, $tempFile)
+            $tasks += $task
+            
+            if ($Global:JmpDebug) {
+                Log-Debug "Started download from: $url"
+            }
+        } catch {
+            if ($Global:JmpDebug) {
+                Log-Debug "Failed to start download from ${url}: $_"
+            }
+        }
+    }
+    
+    # 等待第一个成功的任务
+    $timeout = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $completed -and $timeout.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
+        foreach ($task in $tasks) {
+            if ($task.AsyncResult -and $task.AsyncResult.IsCompleted) {
+                if ($task.AsyncResult.IsFaulted) {
+                    if ($Global:JmpDebug) {
+                        Log-Debug "Download failed from $($task.Url): $($task.AsyncResult.Exception.Message)"
+                    }
+                } else {
+                    # 下载成功
+                    $successUrl = $task.Url
+                    $completed = $true
+                    
+                    # 取消其他下载
+                    $webClient.CancelAsync()
+                    
+                    # 移动临时文件到目标路径
+                    if (Test-Path $task.TempFile) {
+                        Move-Item -Path $task.TempFile -Destination $OutputPath -Force
+                        
+                        if ($Global:JmpDebug) {
+                            Log-Debug "Successfully downloaded from: $successUrl"
+                        }
+                    }
+                    
+                    break
+                }
+            }
+        }
+        
+        Start-Sleep -Milliseconds 100
+    }
+    
+    # 清理
+    $webClient.Dispose()
+    
+    # 清理临时文件
+    foreach ($task in $tasks) {
+        if ($task.TempFile -ne $OutputPath -and (Test-Path $task.TempFile)) {
+            try {
+                Remove-Item $task.TempFile -Force -ErrorAction SilentlyContinue
+            } catch {
+                # 忽略清理错误
+            }
+        }
+    }
+    
+    return $completed
+}
+
 function Download-Fd {
+    param(
+        [bool]$EnableParallelDownload = $true
+    )
+    
     $fdInfo = Get-FdDownloadUrl
     if (-not $fdInfo) {
         Write-ErrorMsg "Failed to get fd download information."
@@ -119,48 +213,64 @@ function Download-Fd {
     
     if ($Global:JmpDebug) {
         Log-Debug "Network connectivity: $networkConnected"
+        Log-Debug "Parallel download enabled: $EnableParallelDownload"
     }
     
-    # 根据网络状态决定下载策略
-    if ($networkConnected) {
+    # 根据网络状态和并行下载设置决定下载策略
+    if ($EnableParallelDownload -and $networkConnected) {
+        # 网络正常 + 并行下载启用：并行尝试所有源
         Write-Info "Downloading fd $($fdInfo.Version)..."
-        Write-Info "Using ghproxy.net for faster download..."
+        Write-Info "Using parallel download from multiple sources..."
         
-        # 优先使用 ghproxy.net
-        try {
-            Invoke-WebRequest -Uri $fdInfo.GhproxyNet -OutFile $zipFile -ErrorAction Stop
-        } catch {
-            Write-Warning "ghproxy.net download failed, trying ghproxy.org..."
-            try {
-                Invoke-WebRequest -Uri $fdInfo.GhproxyOrg -OutFile $zipFile -ErrorAction Stop
-            } catch {
-                Write-Warning "ghproxy.org download failed, trying original URL..."
-                try {
-                    Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
-                } catch {
-                    Write-ErrorMsg "All download attempts failed: $_"
-                    return $false
-                }
-            }
+        $urls = @($fdInfo.GhproxyNet, $fdInfo.GhproxyOrg, $fdInfo.Original)
+        $downloadSuccess = Download-FileParallel -Urls $urls -OutputPath $zipFile -TimeoutSeconds 60
+        
+        if (-not $downloadSuccess) {
+            Write-ErrorMsg "All parallel download attempts failed or timed out."
+            return $false
         }
     } else {
-        Write-Info "Downloading fd $($fdInfo.Version)..."
-        Write-Info "Network unstable, using ghproxy.org..."
-        
-        # 网络不稳定时，顺序尝试
-        try {
-            Invoke-WebRequest -Uri $fdInfo.GhproxyOrg -OutFile $zipFile -ErrorAction Stop
-        } catch {
-            Write-Warning "ghproxy.org download failed, trying ghproxy.net..."
+        # 网络异常或并行下载禁用：顺序下载
+        if ($networkConnected) {
+            Write-Info "Downloading fd $($fdInfo.Version)..."
+            Write-Info "Using ghproxy.net for faster download..."
+            
+            # 优先使用 ghproxy.net
             try {
                 Invoke-WebRequest -Uri $fdInfo.GhproxyNet -OutFile $zipFile -ErrorAction Stop
             } catch {
-                Write-Warning "ghproxy.net download failed, trying original URL..."
+                Write-Warning "ghproxy.net download failed, trying ghproxy.org..."
                 try {
-                    Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
+                    Invoke-WebRequest -Uri $fdInfo.GhproxyOrg -OutFile $zipFile -ErrorAction Stop
                 } catch {
-                    Write-ErrorMsg "All download attempts failed: $_"
-                    return $false
+                    Write-Warning "ghproxy.org download failed, trying original URL..."
+                    try {
+                        Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
+                    } catch {
+                        Write-ErrorMsg "All download attempts failed: $_"
+                        return $false
+                    }
+                }
+            }
+        } else {
+            Write-Info "Downloading fd $($fdInfo.Version)..."
+            Write-Info "Network unstable, using ghproxy.org..."
+            
+            # 网络不稳定时，顺序尝试
+            try {
+                Invoke-WebRequest -Uri $fdInfo.GhproxyOrg -OutFile $zipFile -ErrorAction Stop
+            } catch {
+                Write-Warning "ghproxy.org download failed, trying ghproxy.net..."
+                try {
+                    Invoke-WebRequest -Uri $fdInfo.GhproxyNet -OutFile $zipFile -ErrorAction Stop
+                } catch {
+                    Write-Warning "ghproxy.net download failed, trying original URL..."
+                    try {
+                        Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
+                    } catch {
+                        Write-ErrorMsg "All download attempts failed: $_"
+                        return $false
+                    }
                 }
             }
         }
@@ -208,15 +318,23 @@ function Download-Fd {
 }
 
 function Ask-DownloadFd {
+    param(
+        [bool]$EnableParallelDownload = $true
+    )
+    
     Write-Info "fd tool not found. fd can provide faster Java scanning."
-    Write-Info "Would you like to download fd.exe? (Y/N)"
+    Write-Info "Would you like to download fd.exe? (Y/N, default: Y)"
 
     $response = Read-Host
-    if ($response -match "^[Yy]") {
-        return Download-Fd
-    } else {
+    # 空字符串或 y/Y 都表示同意
+    if ($response -eq "" -or $response -match "^[Yy]") {
+        return Download-Fd -EnableParallelDownload $EnableParallelDownload
+    } elseif ($response -match "^[Nn]") {
         Write-Info "Skipping fd download. Using fallback scan method."
         return $false
+    } else {
+        # 其他输入也视为同意
+        return Download-Fd -EnableParallelDownload $EnableParallelDownload
     }
 }
 

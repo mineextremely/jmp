@@ -27,7 +27,7 @@ function Invoke-Scan {
         if (-not (Test-Path $fdPath)) {
             Write-Warning "fd.exe not found in bin directory."
             # 询问用户是否下载
-            $downloaded = Ask-DownloadFd
+            $downloaded = Ask-DownloadFd -EnableParallelDownload $Ctx.ParallelDownload
             if (-not $downloaded) {
                 Write-Info "Skipping deep scan. Use 'jmp scan' for default scan."
                 return

@@ -8,6 +8,7 @@ Remove-Variable -Name JmpDebug -Scope Global -ErrorAction SilentlyContinue
 $JmpArgs = @()
 $EnableDebug = $false
 $ScanMode = "default"  # default, light, deep
+$EnableParallelDownload = $true  # 默认启用并行下载
 
 $i = 0
 while ($i -lt $args.Count) {
@@ -21,6 +22,9 @@ while ($i -lt $args.Count) {
         $i++
     } elseif ($arg -eq "-deep") {
         $ScanMode = "deep"
+        $i++
+    } elseif ($arg -eq "-no-parallel-download") {
+        $EnableParallelDownload = $false
         $i++
     } else {
         if ($JmpArgs.Count -eq 0) {
@@ -45,6 +49,7 @@ if ($JmpArgs.Count -eq 0) {
         Args = $JmpArgs
         Debug = $EnableDebug
         ScanMode = $ScanMode
+        ParallelDownload = $EnableParallelDownload
     }
     
     if ($Command -eq "scan") {
