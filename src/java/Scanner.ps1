@@ -102,18 +102,22 @@ function Download-FileParallel {
         Log-Debug "Starting parallel download from $($Urls.Count) sources"
     }
     
-    $webClient = New-Object System.Net.WebClient
     $tasks = @()
+    $webClients = @()
     $completed = $false
     $successUrl = $null
     
-    # 为每个 URL 创建下载任务
+    # 为每个 URL 创建独立的 WebClient 实例
     foreach ($url in $Urls) {
         $tempFile = "$OutputPath.temp.$([Guid]::NewGuid())"
+        $webClient = New-Object System.Net.WebClient
+        $webClients += $webClient
+        
         $task = @{
             Url = $url
             TempFile = $tempFile
             AsyncResult = $null
+            WebClient = $webClient
         }
         
         try {
@@ -126,6 +130,12 @@ function Download-FileParallel {
         } catch {
             if ($Global:JmpDebug) {
                 Log-Debug "Failed to start download from ${url}: $_"
+            }
+            # 清理失败的 WebClient
+            try {
+                $webClient.Dispose()
+            } catch {
+                # 忽略清理错误
             }
         }
     }
@@ -145,7 +155,15 @@ function Download-FileParallel {
                     $completed = $true
                     
                     # 取消其他下载
-                    $webClient.CancelAsync()
+                    foreach ($otherTask in $tasks) {
+                        if ($otherTask.WebClient -and $otherTask -ne $task) {
+                            try {
+                                $otherTask.WebClient.CancelAsync()
+                            } catch {
+                                # 忽略取消错误
+                            }
+                        }
+                    }
                     
                     # 移动临时文件到目标路径
                     if (Test-Path $task.TempFile) {
@@ -165,7 +183,13 @@ function Download-FileParallel {
     }
     
     # 清理
-    $webClient.Dispose()
+    foreach ($wc in $webClients) {
+        try {
+            $wc.Dispose()
+        } catch {
+            # 忽略清理错误
+        }
+    }
     
     # 清理临时文件
     foreach ($task in $tasks) {
