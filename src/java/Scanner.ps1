@@ -2,6 +2,55 @@
 
 # FD 下载相关函数
 
+function Test-NetworkConnectivity {
+    # 缓存检测结果（5 分钟有效）
+    if ($Script:NetworkTestCache -and 
+        (Get-Date) -lt $Script:NetworkTestCache.Expiry) {
+        return $Script:NetworkTestCache.Result
+    }
+    
+    $connected = $false
+    
+    try {
+        # 尝试 ICMP 检测（使用阿里云 DNS 223.5.5.5）
+        $connected = Test-Connection -ComputerName 223.5.5.5 -Count 2 -Quiet -ErrorAction SilentlyContinue
+        
+        if ($Global:JmpDebug) {
+            Log-Debug "ICMP connectivity test result: $connected"
+        }
+        
+        # 如果 ICMP 失败，尝试 HTTP 检测（备用方案）
+        if (-not $connected) {
+            try {
+                $response = Invoke-WebRequest -Uri "http://www.baidu.com" -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+                $connected = ($response.StatusCode -eq 200)
+                
+                if ($Global:JmpDebug) {
+                    Log-Debug "HTTP connectivity test result: $connected"
+                }
+            } catch {
+                if ($Global:JmpDebug) {
+                    Log-Debug "HTTP connectivity test failed: $_"
+                }
+                $connected = $false
+            }
+        }
+    } catch {
+        if ($Global:JmpDebug) {
+            Log-Debug "Network connectivity test failed: $_"
+        }
+        $connected = $false
+    }
+    
+    # 缓存结果
+    $Script:NetworkTestCache = @{
+        Result = $connected
+        Expiry = (Get-Date).AddMinutes(5)
+    }
+    
+    return $connected
+}
+
 function Get-FdDownloadUrl {
     try {
         $apiUrl = "https://api.github.com/repos/sharkdp/fd/releases/latest"
@@ -18,22 +67,22 @@ function Get-FdDownloadUrl {
         $originalUrl = $asset.browser_download_url
         $version = $response.tag_name
 
-        # 生成 jsdelivr 加速链接
-        $jsdelivrUrl = $originalUrl -replace "https://github.com/([^/]+)/([^/]+)/releases/download/([^/]+)/(.+)", "https://cdn.jsdelivr.net/gh/`$1/`$2@`$3/`$4"
-
-        # 生成 ghproxy 加速链接
-        $ghproxyUrl = "https://gh-proxy.org/$originalUrl"
+        # 生成 ghproxy.org 加速链接
+        $ghproxyOrgUrl = "https://gh-proxy.org/$originalUrl"
+        
+        # 生成 ghproxy.net 加速链接
+        $ghproxyNetUrl = "https://ghproxy.net/$originalUrl"
 
         if ($Global:JmpDebug) {
             Log-Debug "Original URL: $originalUrl"
-            Log-Debug "jsDelivr URL: $jsdelivrUrl"
-            Log-Debug "ghproxy URL: $ghproxyUrl"
+            Log-Debug "ghproxy.org URL: $ghproxyOrgUrl"
+            Log-Debug "ghproxy.net URL: $ghproxyNetUrl"
         }
 
         return @{
             Original = $originalUrl
-            Jsdelivr = $jsdelivrUrl
-            Ghproxy = $ghproxyUrl
+            GhproxyOrg = $ghproxyOrgUrl
+            GhproxyNet = $ghproxyNetUrl
             Version = $version
         }
     } catch {
@@ -65,23 +114,54 @@ function Download-Fd {
     }
     New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
-    # 尝试使用 jsdelivr 加速链接下载
-    Write-Info "Downloading fd $($fdInfo.Version)..."
-    Write-Info "Using jsDelivr CDN for faster download..."
-
-    try {
-        Invoke-WebRequest -Uri $fdInfo.Jsdelivr -OutFile $zipFile -ErrorAction Stop
-    } catch {
-        Write-Warning "jsDelivr download failed, trying ghproxy..."
+    # 网络检测
+    $networkConnected = Test-NetworkConnectivity
+    
+    if ($Global:JmpDebug) {
+        Log-Debug "Network connectivity: $networkConnected"
+    }
+    
+    # 根据网络状态决定下载策略
+    if ($networkConnected) {
+        Write-Info "Downloading fd $($fdInfo.Version)..."
+        Write-Info "Using ghproxy.net for faster download..."
+        
+        # 优先使用 ghproxy.net
         try {
-            Invoke-WebRequest -Uri $fdInfo.Ghproxy -OutFile $zipFile -ErrorAction Stop
+            Invoke-WebRequest -Uri $fdInfo.GhproxyNet -OutFile $zipFile -ErrorAction Stop
         } catch {
-            Write-Warning "ghproxy download failed, trying original URL..."
+            Write-Warning "ghproxy.net download failed, trying ghproxy.org..."
             try {
-                Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
+                Invoke-WebRequest -Uri $fdInfo.GhproxyOrg -OutFile $zipFile -ErrorAction Stop
             } catch {
-                Write-ErrorMsg "All download attempts failed: $_"
-                return $false
+                Write-Warning "ghproxy.org download failed, trying original URL..."
+                try {
+                    Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
+                } catch {
+                    Write-ErrorMsg "All download attempts failed: $_"
+                    return $false
+                }
+            }
+        }
+    } else {
+        Write-Info "Downloading fd $($fdInfo.Version)..."
+        Write-Info "Network unstable, using ghproxy.org..."
+        
+        # 网络不稳定时，顺序尝试
+        try {
+            Invoke-WebRequest -Uri $fdInfo.GhproxyOrg -OutFile $zipFile -ErrorAction Stop
+        } catch {
+            Write-Warning "ghproxy.org download failed, trying ghproxy.net..."
+            try {
+                Invoke-WebRequest -Uri $fdInfo.GhproxyNet -OutFile $zipFile -ErrorAction Stop
+            } catch {
+                Write-Warning "ghproxy.net download failed, trying original URL..."
+                try {
+                    Invoke-WebRequest -Uri $fdInfo.Original -OutFile $zipFile -ErrorAction Stop
+                } catch {
+                    Write-ErrorMsg "All download attempts failed: $_"
+                    return $false
+                }
             }
         }
     }
@@ -106,13 +186,24 @@ function Download-Fd {
 
         Write-Success "fd.exe downloaded successfully to: $fdExePath"
 
-        # 清理临时文件
-        Remove-Item $tempDir -Recurse -Force
-
         return $true
     } catch {
         Write-ErrorMsg "Failed to extract fd.exe: $_"
         return $false
+    } finally {
+        # 清理临时文件（无论成功或失败）
+        if (Test-Path $tempDir) {
+            try {
+                Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+                if ($Global:JmpDebug) {
+                    Log-Debug "Cleaned up temporary directory: $tempDir"
+                }
+            } catch {
+                if ($Global:JmpDebug) {
+                    Log-Debug "Failed to clean up temporary directory: $tempDir"
+                }
+            }
+        }
     }
 }
 
