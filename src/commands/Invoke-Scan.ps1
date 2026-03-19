@@ -5,43 +5,63 @@ function Invoke-Scan {
     
     $results = @()
     
-    # 根据 FallbackMode 决定扫描策略
-    if ($Ctx.FallbackMode -eq 2) {
-        # -fallback 2: 直接使用 fallback（跳过 ES 和 FD）
+    # 根据 ScanMode 决定扫描策略
+    if ($Ctx.ScanMode -eq "light") {
+        # 轻量模式：仅使用注册表、Microsoft Store 和常见目录
         if ($Global:JmpDebug) {
-            Log-Debug "FallbackMode 2: Direct fallback scan, skipping Everything and fd"
+            Log-Debug "ScanMode: light - Using registry, Microsoft Store, and common paths"
         }
-        $results = Scan-Java-Fallback
-    } elseif ($Ctx.FallbackMode -eq 1) {
-        # -fallback 1: 跳过 ES，尝试使用 FD，如果不可用则使用 fallback
+        Write-Info "Running light scan (fast mode, no external dependencies)..."
+        $results = @(Scan-Java-Light)
+    } elseif ($Ctx.ScanMode -eq "deep") {
+        # 深度模式：使用 FD 全盘搜索
         if ($Global:JmpDebug) {
-            Log-Debug "FallbackMode 1: Skip Everything, try fd, then fallback"
+            Log-Debug "ScanMode: deep - Using FD for full disk search"
         }
-        $results = Invoke-FallbackScan
+        Write-Info "Running deep scan (comprehensive mode, requires fd.exe)..."
+        
+        # 检查 fd.exe 是否存在
+        $binDir = Join-Path $Script:ProjectRoot "bin"
+        $fdPath = Join-Path $binDir "fd.exe"
+        
+        if (-not (Test-Path $fdPath)) {
+            Write-Warning "fd.exe not found in bin directory."
+            # 询问用户是否下载
+            $downloaded = Ask-DownloadFd
+            if (-not $downloaded) {
+                Write-Info "Skipping deep scan. Use 'jmp scan' for default scan."
+                return
+            }
+        }
+        
+        $results = @(Scan-Java-WithFD)
     } else {
-        # FallbackMode 0: 自动模式（默认）
-        # 1. 检查 PATH 中是否有 es
-        if ($esPath = Get-ESPath) {
-            if ($Global:JmpDebug) {
-                Log-Debug "Found es in PATH: $esPath"
-            }
-            
-            # 测试 ES 是否可用
-            if (Test-ESAvailable $esPath) {
-                Write-Info "Everything (ES) is available, using ES for scanning"
-                $results = Scan-Java-WithES $esPath
-            } else {
-                Write-Warning "ES test failed, falling back to fd or fallback"
-                # 降级：尝试使用 fd，如果不可用则使用 fallback
-                $results = Invoke-FallbackScan
-            }
-        } else {
-            # PATH 中没有 es，尝试使用 fd
-            if ($Global:JmpDebug) {
-                Log-Debug "es not found in PATH, trying fd"
-            }
-            $results = Invoke-FallbackScan
+        # 默认模式：轻量模式 + BFS 深度扫描
+        if ($Global:JmpDebug) {
+            Log-Debug "ScanMode: default - Using light scan + BFS deep scan"
         }
+        Write-Info "Running default scan (balanced mode: light + BFS)..."
+        
+        # 1. 先执行轻量模式扫描（快速找到常见 Java）
+        $results = @(Scan-Java-Light)
+        
+        # 2. 执行 BFS 深度扫描（查找更多 Java）
+        $bfsResults = @(Scan-Java-BFS -MaxDepth 8)
+        
+        # 3. 合并结果并去重
+        $uniqueResults = @{}
+        foreach ($result in $results) {
+            if (-not $uniqueResults.ContainsKey($result.path)) {
+                $uniqueResults[$result.path] = $result
+            }
+        }
+        foreach ($result in $bfsResults) {
+            if (-not $uniqueResults.ContainsKey($result.path)) {
+                $uniqueResults[$result.path] = $result
+            }
+        }
+        
+        $results = @($uniqueResults.Values | Sort-Object { $_.versionObj.Major }, { $_.versionObj.Minor }, { $_.versionObj.Patch })
     }
     
     # 保存结果到 JSON 文件
