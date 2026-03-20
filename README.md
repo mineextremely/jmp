@@ -4,14 +4,15 @@
 
 ## 功能特性
 
-- **多种扫描策略**：支持 Everything (ES)、fd 工具、常见目录扫描三种模式
-- **自动下载工具**：自动下载并安装 fd 工具以提升扫描速度
-- **智能供应商识别**：自动识别 Java 发行版供应商（Temurin、Zulu、Oracle、GraalVM、Liberica、Corretto 等）
+- **三种扫描模式**：支持轻量模式（注册表+常见目录）、默认模式（轻量+BFS深度扫描）、深度模式（FD全盘搜索）
+- **自动下载工具**：自动下载并安装 fd 工具以提升深度扫描速度
+- **智能供应商识别**：自动识别 Java 发行版供应商（Temurin、Zulu、Oracle、GraalVM、Liberica、Corretto、Microsoft 等）
 - **版本切换**：快速切换到指定的 Java 版本和供应商
 - **持久化固定**：支持将 Java 版本持久化固定到用户或系统环境
 - **版本模糊匹配**：支持多种版本格式和模糊匹配
 - **供应商优先级**：支持配置不同供应商的优先级
 - **跨版本兼容**：兼容 PowerShell 5.1 和 PowerShell 7+
+- **模块化架构**：清晰的代码组织，易于维护和扩展
 
 ## 技术栈
 
@@ -78,22 +79,35 @@ jmp help
 
 扫描系统中的 Java 安装，支持三种模式：
 
-- **自动模式（默认）**：优先使用 Everything (ES)，失败后尝试 fd，最后使用常见目录扫描
-- **-fallback 1**：跳过 Everything，尝试使用 fd，失败后使用常见目录扫描
-- **-fallback 2**：直接使用常见目录扫描
+- **默认模式**：轻量扫描（注册表+常见目录）+ BFS 深度扫描，平衡速度和覆盖率
+- **轻量模式（-light）**：仅使用注册表、Microsoft Store 和常见目录扫描，无外部依赖
+- **深度模式（-deep）**：使用 fd 工具进行全盘搜索，覆盖率最高
 
 ```bash
-jmp scan                    # 自动扫描
-jmp scan -fallback 1        # 跳过 ES，使用 fd 或 fallback
-jmp scan -fallback 2        # 直接使用 fallback 扫描
+jmp scan                    # 默认模式（轻量 + BFS）
+jmp scan -light             # 轻量模式（仅注册表+常见目录）
+jmp scan -deep              # 深度模式（FD 全盘搜索）
 jmp scan -debug             # 启用调试输出
 ```
 
 **扫描策略说明**：
 
-1. **Everything (ES)**：最快的扫描方式，需要 Everything 服务正常运行
-2. **fd 工具**：快速文件搜索工具，如果不存在会自动询问是否下载
-3. **Fallback 扫描**：扫描常见 Java 安装目录和 PATH
+1. **轻量模式**：
+   - 扫描注册表（HKLM 和 HKCU）
+   - 扫描 Microsoft Store 安装
+   - 扫描常见目录（Program Files、USERPROFILE、APPDATA 等）
+   - 无外部依赖，速度最快
+
+2. **默认模式**：
+   - 先执行轻量模式扫描
+   - 再执行 BFS 深度扫描（最大深度 8）
+   - 合并结果并去重
+   - 平衡速度和覆盖率
+
+3. **深度模式**：
+   - 使用 fd 工具进行全盘搜索
+   - 覆盖率最高，但速度较慢
+   - 需要 fd.exe 工具（如不存在会询问是否下载）
 
 ### list
 
@@ -107,11 +121,11 @@ jmp list
 ```
 version   vendor   name                              source
 -------   ------   ----                              ------
-1.8.0_451 oracle   jdk-8u451                         es
-1.8.0_472 temurin  jdk8u472-b08                      es
-17.0.17   temurin  jdk-17.0.17+10                    es
-21.0.9    temurin  jdk-21.0.9+10                     es
-25.0.1    zulu     zulu25.30.17-ca-jdk25.0.1-win_x64 es
+1.8.0_451 oracle   jdk-8u451                         bfs
+1.8.0_472 temurin  jdk8u472-b08                      bfs
+17.0.17   temurin  jdk-17.0.17+10                    bfs
+21.0.9    temurin  jdk-21.0.9+10                     bfs
+25.0.1    zulu     zulu25.30.17-ca-jdk25.0.1-win_x64 bfs
 ```
 
 ### use
@@ -202,7 +216,7 @@ jmp help
 ```
 jmp/
 ├── jmp.bat                    # Windows 批处理启动器
-├── jmp.ps1                    # 主入口脚本
+├── jmp.ps1                    # 主入口脚本（参数解析和命令路由）
 ├── config/
 │   └── vendor-priority.json   # 供应商优先级配置
 ├── src/
@@ -218,20 +232,26 @@ jmp/
 │   │   └── Invoke-Version.ps1 # 显示版本信息
 │   ├── core/                  # 核心模块
 │   │   ├── Args.ps1           # 参数解析
-│   │   ├── Bootstrap.ps1      # 模块加载引导
+│   │   ├── Bootstrap.ps1      # 模块加载引导（自动加载所有 .ps1 文件）
 │   │   ├── Context.ps1        # 上下文对象
 │   │   └── Version.ps1        # 版本显示工具
 │   ├── env/                   # 环境相关
-│   │   └── Set.ps1            # 环境变量设置
+│   │   └── Set.ps1            # 环境变量设置（会话级、用户级、系统级）
 │   ├── io/
 │   │   └── Log.ps1            # 日志输出
-│   ├── java/                  # Java 相关功能
-│   │   ├── Find.ps1           # Java 查找函数
+│   ├── java/                  # Java 相关功能（模块化）
+│   │   ├── Network.ps1        # 网络检测和 fd 工具下载
+│   │   ├── Fallback.ps1       # PATH 和常见目录扫描
+│   │   ├── LightScan.ps1      # 轻量扫描（注册表、Store、CommonPaths）
+│   │   ├── BFSScan.ps1        # BFS 深度扫描（广度优先搜索）
+│   │   ├── FDScan.ps1         # FD 全盘扫描
+│   │   ├── Scanner.ps1        # 扫描模块说明文档
+│   │   ├── Find.ps1           # Java 查找和选择函数
 │   │   ├── Match.ps1          # 版本匹配函数
-│   │   ├── Scanner.ps1        # Java 扫描函数
-│   │   └── Vendor.ps1         # 供应商检测
+│   │   └── Vendor.ps1         # 供应商检测和优先级管理
 │   └── util/
 │       └── Fs.ps1             # 文件系统工具（JSON 读写）
+├── bin/                       # 二进制文件目录（fd.exe 等工具）
 └── java-versions.json         # 扫描结果缓存（运行时生成）
 ```
 
@@ -263,21 +283,24 @@ JMP 支持多种版本格式的匹配：
 
 ### fd 工具
 
-JMP 支持自动下载 fd 工具以提升扫描速度：
+JMP 支持自动下载 fd 工具以提升深度扫描速度：
 
-- 下载源优先级：jsDelivr CDN → ghproxy → GitHub 原始链接
-- 自动解压并安装到项目根目录
-- 支持用户选择是否下载
+- 自动从 GitHub API 获取最新版本
+- 支持多个下载源（ghproxy.org、ghproxy.net、GitHub 原始链接）
+- 支持并行下载（默认启用）
+- 包含网络连通性检测（ICMP + HTTP）
+- 自动解压并安装到 bin 目录
 
 ## 注意事项
 
 1. **环境变量作用域**：
    - `use` 命令修改的环境变量仅在当前 PowerShell 会话中有效
    - `pin` 命令会将环境变量持久化到用户或系统环境，新终端会话会自动使用该版本
-2. **Everything 服务**：ES 服务需要正常运行才能使用 Everything 搜索功能
-3. **PowerShell 版本**：支持 PowerShell 5.1 和 PowerShell 7+
-4. **文件编码**：所有 PowerShell 脚本使用 UTF-8 编码
-5. **管理员权限**：系统级 `pin` 和 `unpin` 操作需要管理员权限
+2. **PowerShell 版本**：支持 PowerShell 5.1 和 PowerShell 7+
+3. **文件编码**：所有 PowerShell 脚本使用 UTF-8 编码
+4. **管理员权限**：系统级 `pin` 和 `unpin` 操作需要管理员权限
+5. **fd 工具**：深度模式需要 fd.exe 工具，如不存在会询问是否下载
+6. **扫描速度**：轻量模式最快，默认模式平衡，深度模式最慢但覆盖率最高
 
 ## 开发
 
@@ -308,13 +331,32 @@ MIT License
 
 ## 更新日志
 
+### v1.2.1
+
+- ✅ **修复 PATH 清理缺陷**：修复 `use` 连续切换版本时 PATH 累积多个 Java bin 路径的问题
+- ✅ **修复 `unuse` PATH 残留**：修复 `unuse` 后 PATH 中残留 Java 父目录路径的问题
+- ✅ **清理废弃代码**：移除 ES 时代遗留的 `-fallback`/`FallbackMode` 选项
+- ✅ **补全命令路由**：`Invoke-JmpCommand` 补充 `unuse`、`pin`、`unpin` 命令
+
+### v1.2.0
+
+- ✅ **模块化重构**：将 Scanner.ps1 拆分为 5 个功能模块
+  - `Network.ps1`：网络检测和 fd 工具下载功能
+  - `Fallback.ps1`：PATH 和常见目录扫描
+  - `LightScan.ps1`：轻量扫描（注册表、Store、CommonPaths）
+  - `BFSScan.ps1`：BFS 深度扫描（广度优先搜索）
+  - `FDScan.ps1`：FD 全盘扫描
+- ✅ **移除 ES 功能**：删除 Everything (ES) 搜索功能及相关代码
+- ✅ **更新扫描策略**：重构为三种扫描模式（light、default、deep）
+- ✅ **Bootstrap 改进**：使用 UTF-8 编码加载所有模块
+- ✅ **优化代码结构**：提高代码可维护性和可扩展性
+- ✅ **改进文档**：更新 README 和项目结构说明
+
 ### v1.1.2
 
-- ✅ 修复 ES 扫描功能：添加 `-full-path-and-name` 参数以获取完整路径
 - ✅ 修复 JSON 解析问题：正确处理 PowerShell ConvertFrom-Json 返回的数组结构
-- ✅ 修复字段访问错误：使用 `filename` 字段而不是 `name` 字段
 - ✅ 修复非管理员环境下的扫描问题：`jmp -debug scan` 现在可以正常工作
-- ✅ 提升扫描稳定性：通过修复 ES 集成问题，显著提高扫描可靠性
+- ✅ 提升扫描稳定性
 
 ### v1.1.1
 
@@ -336,7 +378,7 @@ MIT License
 
 ### v1.0.0
 
-- ✅ 实现三种扫描策略（Everything、fd、fallback）
+- ✅ 实现多种扫描策略（注册表、BFS、fd）
 - ✅ 自动下载 fd 工具
 - ✅ 智能供应商识别（支持 7+ 种供应商）
 - ✅ 版本模糊匹配

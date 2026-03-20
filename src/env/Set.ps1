@@ -17,10 +17,26 @@ function Set-JavaEnvironment {
         return $false
     }
 
+    $oldJavaHome = $env:JAVA_HOME
     $env:JAVA_HOME = $Java.Path
-    $env:PATH = $env:PATH -replace [regex]::Escape("$env:JAVA_HOME\bin;"), ""
-    $env:PATH = $env:PATH -replace [regex]::Escape("$env:JAVA_HOME\bin"), ""
-    $env:PATH = "$($Java.Path)\bin;$env:PATH"
+
+    # 使用旧的 JAVA_HOME 清理 PATH 中的旧 Java bin 路径
+    if ($oldJavaHome) {
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
+    }
+
+    # 过滤掉所有残留的 Java bin 路径
+    $pathParts = $env:PATH -split ';'
+    $filteredParts = @()
+    foreach ($part in $pathParts) {
+        $trimmedPart = $part.Trim()
+        if ($trimmedPart -and -not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Join-Path $trimmedPart "java.exe") -ErrorAction SilentlyContinue))) {
+            $filteredParts += $trimmedPart
+        }
+    }
+
+    $env:PATH = "$($Java.Path)\bin;" + ($filteredParts -join ';')
     
     Write-Success "Switched to Java $($Java.VersionObj.major) ($($Java.Vendor))"
     Write-Info "JAVA_HOME = $($Java.Path)"
@@ -154,20 +170,25 @@ function Remove-PersistentJavaEnvironment {
 }
 
 function Clear-JavaEnvironment {
+    # 先保存旧值用于精确清理，再清除 JAVA_HOME
+    $oldJavaHome = $env:JAVA_HOME
     $env:JAVA_HOME = $null
-    
-    $env:PATH = $env:PATH -replace [regex]::Escape("$env:JAVA_HOME\bin;"), ""
-    $env:PATH = $env:PATH -replace [regex]::Escape("$env:JAVA_HOME\bin"), ""
-    
+
+    if ($oldJavaHome) {
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
+    }
+
+    # 过滤掉所有残留的 Java bin 路径
     $pathParts = $env:PATH -split ';'
     $filteredParts = @()
     foreach ($part in $pathParts) {
         $trimmedPart = $part.Trim()
-        if (-not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Split-Path $trimmedPart)))) {
+        if ($trimmedPart -and -not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Join-Path $trimmedPart "java.exe") -ErrorAction SilentlyContinue))) {
             $filteredParts += $trimmedPart
         }
     }
-    
+
     $env:PATH = $filteredParts -join ';'
     
     Write-Success "Cleared Java environment from current session"

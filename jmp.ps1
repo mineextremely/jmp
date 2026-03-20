@@ -2,9 +2,13 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 . "$Root/src/core/Bootstrap.ps1"
 
+# 清理可能存在的全局调试变量
+Remove-Variable -Name JmpDebug -Scope Global -ErrorAction SilentlyContinue
+
 $JmpArgs = @()
 $EnableDebug = $false
-$FallbackMode = 0
+$ScanMode = "default"  # default, light, deep
+$EnableParallelDownload = $true  # 默认启用并行下载
 
 $i = 0
 while ($i -lt $args.Count) {
@@ -13,14 +17,15 @@ while ($i -lt $args.Count) {
     if ($arg -eq "-debug") {
         $EnableDebug = $true
         $i++
-    } elseif ($arg -eq "-fallback") {
-        if ($i + 1 -lt $args.Count -and $args[$i + 1] -match '^[12]$') {
-            $FallbackMode = [int]$args[$i + 1]
-            $i += 2
-        } else {
-            $FallbackMode = 2
-            $i++
-        }
+    } elseif ($arg -eq "-light") {
+        $ScanMode = "light"
+        $i++
+    } elseif ($arg -eq "-deep") {
+        $ScanMode = "deep"
+        $i++
+    } elseif ($arg -eq "-no-parallel-download") {
+        $EnableParallelDownload = $false
+        $i++
     } else {
         if ($JmpArgs.Count -eq 0) {
             $JmpArgs = @($arg)
@@ -43,7 +48,8 @@ if ($JmpArgs.Count -eq 0) {
     $ctx = @{
         Args = $JmpArgs
         Debug = $EnableDebug
-        FallbackMode = $FallbackMode
+        ScanMode = $ScanMode
+        ParallelDownload = $EnableParallelDownload
     }
     
     if ($Command -eq "scan") {
