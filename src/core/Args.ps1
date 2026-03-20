@@ -1,10 +1,8 @@
 function Parse-JmpArgs {
     param([string[]]$InputArgs)
 
-    # 初始化参数数组
     [string[]]$JmpArgs = @()
     $EnableDebug = $false
-    $FallbackMode = 0  # 0=自动, 1=跳过ES用FD, 2=直接fallback
 
     $i = 0
     while ($i -lt $InputArgs.Count) {
@@ -13,16 +11,6 @@ function Parse-JmpArgs {
         if ($arg -eq "-debug") {
             $EnableDebug = $true
             $i++
-        } elseif ($arg -eq "-fallback") {
-            # 检查是否有下一个参数，且为数字
-            if ($i + 1 -lt $InputArgs.Count -and $InputArgs[$i + 1] -match '^[12]$') {
-                $FallbackMode = [int]$InputArgs[$i + 1]
-                $i += 2
-            } else {
-                # 默认：-fallback 不带参数等价于 -fallback 2
-                $FallbackMode = 2
-                $i++
-            }
         } else {
             # 强制转换为字符串，避免数字截断
             $JmpArgs = @($JmpArgs; "$($arg)")
@@ -35,9 +23,6 @@ function Parse-JmpArgs {
         for ($i = 0; $i -lt $JmpArgs.Count; $i++) {
             Write-Host "Debug: Raw JmpArgs[$i]: '$($JmpArgs[$i])' (Type: $($JmpArgs[$i].GetType().Name))" -ForegroundColor Gray
         }
-        if ($FallbackMode -ne 0) {
-            Write-Host "Debug: FallbackMode = $FallbackMode" -ForegroundColor Gray
-        }
     }
 
     $Command = if ($JmpArgs.Count -gt 0) { $JmpArgs[0] } else { $null }
@@ -46,8 +31,7 @@ function Parse-JmpArgs {
     New-JmpContext `
         -Command $Command `
         -Params  $Params `
-        -Debug   $EnableDebug `
-        -FallbackMode $FallbackMode
+        -Debug   $EnableDebug
 }
 
 function Invoke-JmpCommand {
@@ -61,6 +45,9 @@ function Invoke-JmpCommand {
         "scan"    { Invoke-Scan $Ctx }
         "list"    { Invoke-List $Ctx }
         "use"     { Invoke-Use $Ctx }
+        "unuse"   { Invoke-Unuse $Ctx }
+        "pin"     { Invoke-Pin $Ctx }
+        "unpin"   { Invoke-Unpin $Ctx }
         "current" { Invoke-Current $Ctx }
         "version" { Invoke-Version $Ctx }
         "help"    { Invoke-Help $Ctx }

@@ -2,14 +2,12 @@ function New-JmpContext {
     param(
         [string]$Command,
         [string[]]$Params,
-        [bool]$Debug,
-        [int]$FallbackMode = 0
+        [bool]$Debug
     )
 
     [pscustomobject]@{
         Command = $Command
         Params  = $Params
         Debug   = $Debug
-        FallbackMode = $FallbackMode
     }
 }

@@ -121,11 +121,11 @@ jmp list
 ```
 version   vendor   name                              source
 -------   ------   ----                              ------
-1.8.0_451 oracle   jdk-8u451                         es
-1.8.0_472 temurin  jdk8u472-b08                      es
-17.0.17   temurin  jdk-17.0.17+10                    es
-21.0.9    temurin  jdk-21.0.9+10                     es
-25.0.1    zulu     zulu25.30.17-ca-jdk25.0.1-win_x64 es
+1.8.0_451 oracle   jdk-8u451                         bfs
+1.8.0_472 temurin  jdk8u472-b08                      bfs
+17.0.17   temurin  jdk-17.0.17+10                    bfs
+21.0.9    temurin  jdk-21.0.9+10                     bfs
+25.0.1    zulu     zulu25.30.17-ca-jdk25.0.1-win_x64 bfs
 ```
 
 ### use
@@ -331,6 +331,13 @@ MIT License
 
 ## 更新日志
 
+### v1.2.1
+
+- ✅ **修复 PATH 清理缺陷**：修复 `use` 连续切换版本时 PATH 累积多个 Java bin 路径的问题
+- ✅ **修复 `unuse` PATH 残留**：修复 `unuse` 后 PATH 中残留 Java 父目录路径的问题
+- ✅ **清理废弃代码**：移除 ES 时代遗留的 `-fallback`/`FallbackMode` 选项
+- ✅ **补全命令路由**：`Invoke-JmpCommand` 补充 `unuse`、`pin`、`unpin` 命令
+
 ### v1.2.0
 
 - ✅ **模块化重构**：将 Scanner.ps1 拆分为 5 个功能模块
@@ -347,11 +354,9 @@ MIT License
 
 ### v1.1.2
 
-- ✅ 修复 ES 扫描功能：添加 `-full-path-and-name` 参数以获取完整路径
 - ✅ 修复 JSON 解析问题：正确处理 PowerShell ConvertFrom-Json 返回的数组结构
-- ✅ 修复字段访问错误：使用 `filename` 字段而不是 `name` 字段
 - ✅ 修复非管理员环境下的扫描问题：`jmp -debug scan` 现在可以正常工作
-- ✅ 提升扫描稳定性：通过修复 ES 集成问题，显著提高扫描可靠性
+- ✅ 提升扫描稳定性
 
 ### v1.1.1
 
@@ -373,7 +378,7 @@ MIT License
 
 ### v1.0.0
 
-- ✅ 实现三种扫描策略（Everything、fd、fallback）
+- ✅ 实现多种扫描策略（注册表、BFS、fd）
 - ✅ 自动下载 fd 工具
 - ✅ 智能供应商识别（支持 7+ 种供应商）
 - ✅ 版本模糊匹配
