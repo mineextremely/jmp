@@ -1,4 +1,4 @@
-﻿Add-Type -TypeDefinition @"
+Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class Win32 {
@@ -8,6 +8,88 @@ public class Win32 {
         uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 }
 "@
+
+function Get-KnownJavaBinEntries {
+    $javaBins = New-Object System.Collections.Generic.List[string]
+
+    $jsonPath = Join-Path $Script:ProjectRoot "java-versions.json"
+    if (Test-Path $jsonPath) {
+        try {
+            $jsonData = Load-Json $jsonPath
+            foreach ($item in @($jsonData)) {
+                if ($item.path) {
+                    $javaBins.Add(([IO.Path]::GetFullPath((Join-Path $item.path "bin"))))
+                }
+            }
+        } catch {
+            if ($Global:JmpDebug) {
+                Log-Debug "Failed to load known Java installations from cache: $_"
+            }
+        }
+    }
+
+    return @($javaBins | Sort-Object -Unique)
+}
+
+function Test-IsJavaBinEntry {
+    param(
+        [string]$PathEntry,
+        [string[]]$KnownJavaBins = @()
+    )
+
+    if (-not $PathEntry) {
+        return $false
+    }
+
+    $normalizedEntry = $PathEntry.Trim().TrimEnd('\')
+    if (-not $normalizedEntry) {
+        return $false
+    }
+
+    foreach ($knownBin in $KnownJavaBins) {
+        if ($normalizedEntry -ieq $knownBin.TrimEnd('\')) {
+            return $true
+        }
+    }
+
+    $javaExe = Join-Path $normalizedEntry "java.exe"
+    $releaseFile = Join-Path (Split-Path $normalizedEntry -Parent) "release"
+
+    return (Test-Path $javaExe -ErrorAction SilentlyContinue) -and (Test-Path $releaseFile -ErrorAction SilentlyContinue)
+}
+
+function Remove-JavaBinEntriesFromPath {
+    param(
+        [string]$PathValue,
+        [string[]]$ExtraJavaHomes = @()
+    )
+
+    $knownJavaBins = New-Object System.Collections.Generic.List[string]
+    foreach ($knownBin in @(Get-KnownJavaBinEntries)) {
+        $knownJavaBins.Add($knownBin.TrimEnd('\'))
+    }
+    foreach ($javaHome in @($ExtraJavaHomes | Where-Object { $_ })) {
+        $knownJavaBins.Add(([IO.Path]::GetFullPath((Join-Path $javaHome "bin"))).TrimEnd('\'))
+    }
+
+    $filteredParts = New-Object System.Collections.Generic.List[string]
+    foreach ($part in @($PathValue -split ';')) {
+        $trimmedPart = $part.Trim()
+        if (-not $trimmedPart) {
+            continue
+        }
+
+        if (Test-IsJavaBinEntry -PathEntry $trimmedPart -KnownJavaBins @($knownJavaBins)) {
+            continue
+        }
+
+        if (-not ($filteredParts -contains $trimmedPart)) {
+            $filteredParts.Add($trimmedPart)
+        }
+    }
+
+    return ($filteredParts -join ';')
+}
 
 function Set-JavaEnvironment {
     param($Java)
@@ -20,29 +102,15 @@ function Set-JavaEnvironment {
     $oldJavaHome = $env:JAVA_HOME
     $env:JAVA_HOME = $Java.Path
 
-    # 使用旧的 JAVA_HOME 清理 PATH 中的旧 Java bin 路径
-    if ($oldJavaHome) {
-        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
-        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
-    }
+    $cleanPath = Remove-JavaBinEntriesFromPath -PathValue $env:PATH -ExtraJavaHomes @($oldJavaHome, $Java.Path)
+    $javaBin = "$($Java.Path)\bin"
+    $env:PATH = if ($cleanPath) { "$javaBin;$cleanPath" } else { $javaBin }
 
-    # 过滤掉所有残留的 Java bin 路径
-    $pathParts = $env:PATH -split ';'
-    $filteredParts = @()
-    foreach ($part in $pathParts) {
-        $trimmedPart = $part.Trim()
-        if ($trimmedPart -and -not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Join-Path $trimmedPart "java.exe") -ErrorAction SilentlyContinue))) {
-            $filteredParts += $trimmedPart
-        }
-    }
-
-    $env:PATH = "$($Java.Path)\bin;" + ($filteredParts -join ';')
-    
     Write-Success "Switched to Java $($Java.VersionObj.major) ($($Java.Vendor))"
     Write-Info "JAVA_HOME = $($Java.Path)"
     Write-Info "Version: $($Java.Version)"
     Write-Info "Added to PATH: $($Java.Path)\bin"
-    
+
     try {
         $javaCmd = "$($Java.Path)\bin\java.exe"
         if (Test-Path $javaCmd) {
@@ -85,17 +153,8 @@ function Set-PersistentJavaEnvironment {
 
         $currentPath = [Environment]::GetEnvironmentVariable("PATH", $target)
         $newJavaBin = "$($Java.Path)\bin"
-        
-        $pathParts = $currentPath -split ';'
-        $filteredParts = @()
-        foreach ($part in $pathParts) {
-            $trimmedPart = $part.Trim()
-            if (-not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Split-Path $trimmedPart)))) {
-                $filteredParts += $trimmedPart
-            }
-        }
-        
-        $newPath = "$newJavaBin;" + ($filteredParts -join ';')
+        $cleanPath = Remove-JavaBinEntriesFromPath -PathValue $currentPath -ExtraJavaHomes @($Java.Path)
+        $newPath = if ($cleanPath) { "$newJavaBin;$cleanPath" } else { $newJavaBin }
         [Environment]::SetEnvironmentVariable("PATH", $newPath, $target)
 
         if ($Scope -eq "system") {
@@ -134,20 +193,12 @@ function Remove-PersistentJavaEnvironment {
 
     try {
         $target = if ($Scope -eq "system") { [EnvironmentVariableTarget]::Machine } else { [EnvironmentVariableTarget]::User }
+        $oldJavaHome = [Environment]::GetEnvironmentVariable("JAVA_HOME", $target)
         [Environment]::SetEnvironmentVariable("JAVA_HOME", $null, $target)
 
         $currentPath = [Environment]::GetEnvironmentVariable("PATH", $target)
         if ($currentPath) {
-            $pathParts = $currentPath -split ';'
-            $filteredParts = @()
-            foreach ($part in $pathParts) {
-                $trimmedPart = $part.Trim()
-                if (-not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Split-Path $trimmedPart)))) {
-                    $filteredParts += $trimmedPart
-                }
-            }
-            
-            $newPath = $filteredParts -join ';'
+            $newPath = Remove-JavaBinEntriesFromPath -PathValue $currentPath -ExtraJavaHomes @($oldJavaHome)
             [Environment]::SetEnvironmentVariable("PATH", $newPath, $target)
         }
 
@@ -170,30 +221,13 @@ function Remove-PersistentJavaEnvironment {
 }
 
 function Clear-JavaEnvironment {
-    # 先保存旧值用于精确清理，再清除 JAVA_HOME
     $oldJavaHome = $env:JAVA_HOME
     $env:JAVA_HOME = $null
+    $env:PATH = Remove-JavaBinEntriesFromPath -PathValue $env:PATH -ExtraJavaHomes @($oldJavaHome)
 
-    if ($oldJavaHome) {
-        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
-        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
-    }
-
-    # 过滤掉所有残留的 Java bin 路径
-    $pathParts = $env:PATH -split ';'
-    $filteredParts = @()
-    foreach ($part in $pathParts) {
-        $trimmedPart = $part.Trim()
-        if ($trimmedPart -and -not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Join-Path $trimmedPart "java.exe") -ErrorAction SilentlyContinue))) {
-            $filteredParts += $trimmedPart
-        }
-    }
-
-    $env:PATH = $filteredParts -join ';'
-    
     Write-Success "Cleared Java environment from current session"
     Write-Info "JAVA_HOME has been removed"
     Write-Info "Java paths have been removed from PATH"
-    
+
     return $true
 }

@@ -13,8 +13,13 @@ function Invoke-Use {
         return
     }
 
+    if ($Ctx.Args.Count -gt 3) {
+        Write-Warning "Too many arguments. Usage: jmp use <version> [vendor]"
+        return
+    }
+
     $version = $Ctx.Args[1]
-    $vendor = if ($Ctx.Args.Count -ge 3) { $Ctx.Args[2] } else { $null }
+    $vendor = if ($Ctx.Args.Count -eq 3) { [string]$Ctx.Args[2] } else { $null }
 
     if ($Global:JmpDebug) {
         Log-Debug "Calling Find-Java with version '$version' and vendor '$vendor'"
@@ -22,6 +27,6 @@ function Invoke-Use {
 
     $java = Find-Java -Version $version -Vendor $vendor
     if ($java) {
-        Set-JavaEnvironment $java
+        Set-JavaEnvironment $java | Out-Null
     }
 }

@@ -1,4 +1,4 @@
-﻿function Invoke-Pin {
+function Invoke-Pin {
     param($Ctx)
 
     if ($Ctx.Args.Count -lt 2) {
@@ -22,15 +22,20 @@
 
     $argIndex = 2
     while ($argIndex -lt $Ctx.Args.Count) {
-        $arg = $Ctx.Args[$argIndex]
-        
-        if ($arg -eq "user" -or $arg -eq "system") {
-            $scope = $arg
+        $arg = [string]$Ctx.Args[$argIndex]
+        $normalizedArg = $arg.ToLowerInvariant()
+
+        if ($normalizedArg -eq "user" -or $normalizedArg -eq "system") {
+            $scope = $normalizedArg
         }
-        else {
+        elseif (-not $vendor) {
             $vendor = $arg
         }
-        
+        else {
+            Write-Warning "Unexpected argument '$arg'. Usage: jmp pin <version> [vendor] [scope]"
+            return
+        }
+
         $argIndex++
     }
 
@@ -41,6 +46,10 @@
 
     $java = Find-Java -Version $version -Vendor $vendor
     if ($java) {
-        Set-PersistentJavaEnvironment -Java $java -Scope $scope
+        $pinned = Set-PersistentJavaEnvironment -Java $java -Scope $scope
+        if ($pinned -and $scope -eq "user") {
+            Set-JavaEnvironment $java | Out-Null
+            Write-Info "Current session was updated to match the pinned user environment."
+        }
     }
 }
