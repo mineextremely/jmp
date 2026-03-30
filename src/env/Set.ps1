@@ -106,6 +106,24 @@ function Set-JavaEnvironment {
     $javaBin = "$($Java.Path)\bin"
     $env:PATH = if ($cleanPath) { "$javaBin;$cleanPath" } else { $javaBin }
 
+    # 使用旧的 JAVA_HOME 清理 PATH 中的旧 Java bin 路径
+    if ($oldJavaHome) {
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
+    }
+
+    # 过滤掉所有残留的 Java bin 路径
+    $pathParts = $env:PATH -split ';'
+    $filteredParts = @()
+    foreach ($part in $pathParts) {
+        $trimmedPart = $part.Trim()
+        if ($trimmedPart -and -not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Join-Path $trimmedPart "java.exe") -ErrorAction SilentlyContinue))) {
+            $filteredParts += $trimmedPart
+        }
+    }
+
+    $env:PATH = "$($Java.Path)\bin;" + ($filteredParts -join ';')
+    
     Write-Success "Switched to Java $($Java.VersionObj.major) ($($Java.Vendor))"
     Write-Info "JAVA_HOME = $($Java.Path)"
     Write-Info "Version: $($Java.Version)"
@@ -225,6 +243,27 @@ function Clear-JavaEnvironment {
     $env:JAVA_HOME = $null
     $env:PATH = Remove-JavaBinEntriesFromPath -PathValue $env:PATH -ExtraJavaHomes @($oldJavaHome)
 
+    # 先保存旧值用于精确清理，再清除 JAVA_HOME
+    $oldJavaHome = $env:JAVA_HOME
+    $env:JAVA_HOME = $null
+
+    if ($oldJavaHome) {
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
+        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
+    }
+
+    # 过滤掉所有残留的 Java bin 路径
+    $pathParts = $env:PATH -split ';'
+    $filteredParts = @()
+    foreach ($part in $pathParts) {
+        $trimmedPart = $part.Trim()
+        if ($trimmedPart -and -not ($trimmedPart -imatch "\\bin$" -and (Test-Path (Join-Path $trimmedPart "java.exe") -ErrorAction SilentlyContinue))) {
+            $filteredParts += $trimmedPart
+        }
+    }
+
+    $env:PATH = $filteredParts -join ';'
+    
     Write-Success "Cleared Java environment from current session"
     Write-Info "JAVA_HOME has been removed"
     Write-Info "Java paths have been removed from PATH"
