@@ -11,6 +11,10 @@
 - **持久化固定**：支持将 Java 版本持久化固定到用户或系统环境
 - **版本模糊匹配**：支持多种版本格式和模糊匹配
 - **供应商优先级**：支持配置不同供应商的优先级
+- **详细信息查看**：查看 Java 发行版的详细信息（架构、release 文件、属性等）
+- **健康诊断**：诊断 Java 环境问题，检测 PATH 污染、JAVA_HOME 一致性等
+- **版本预览**：预览会选中哪个 Java 版本，但不实际切换
+- **环境重置**：一键重置 JMP 到初始状态
 - **跨版本兼容**：兼容 PowerShell 5.1 和 PowerShell 7+
 - **模块化架构**：清晰的代码组织，易于维护和扩展
 
@@ -65,6 +69,30 @@ jmp unpin system
 
 # 显示当前激活的 Java 版本
 jmp current
+
+# 预览会选中哪个 Java 17（不实际切换）
+jmp which 17
+
+# 预览 Temurin Java 17
+jmp which 17 temurin
+
+# 显示当前会话的 Java
+jmp which --current
+
+# 显示 Java 17 的详细信息
+jmp info 17
+
+# 显示 Java 17 的详细信息（指定供应商）
+jmp info 17 temurin
+
+# 诊断 Java 环境问题
+jmp doctor
+
+# 重置 JMP 到初始状态
+jmp reset
+
+# 重置 JMP（包含系统环境变量）
+jmp reset --system
 
 # 显示 JMP 版本信息
 jmp version
@@ -181,6 +209,63 @@ jmp unpin system           # 移除系统环境的固定设置（需要管理员
 jmp current
 ```
 
+### which
+
+预览会选中哪个 Java 版本，但不实际切换
+
+```bash
+jmp which 17                  # 预览 Java 17
+jmp which 17 temurin          # 预览 Temurin Java 17
+jmp which --current           # 显示当前会话的 Java
+```
+
+### info
+
+显示 Java 发行版的详细信息
+
+```bash
+jmp info 17                   # 显示 Java 17 的详细信息
+jmp info 17 temurin           # 显示 Temurin Java 17 的详细信息
+```
+
+**输出信息包括**：
+- 版本、供应商、名称、路径、来源
+- 架构（x86/x64）
+- release 文件内容
+- Java 属性（java -XshowSettings:properties）
+
+### doctor
+
+诊断 Java 环境问题，检测常见错误配置
+
+```bash
+jmp doctor
+```
+
+**诊断项目**：
+- 缓存文件状态和时效性
+- fd.exe 是否安装
+- PATH 中的 Java 路径重复
+- JAVA_HOME 与 PATH 的一致性
+- 供应商优先级配置
+- fd 版本目录污染
+
+### reset
+
+重置 JMP 到初始状态（清除所有配置和缓存）
+
+```bash
+jmp reset                     # 清除会话 + user JAVA_HOME + 缓存
+jmp reset --system           # 额外清除 system JAVA_HOME（需要管理员）
+jmp reset --force            # 跳过确认提示
+```
+
+**警告**：此操作会清除：
+- 当前会话的 Java 环境变量
+- 用户级 JAVA_HOME 和 PATH
+- 系统级 JAVA_HOME 和 PATH（需要管理员）
+- 扫描结果缓存文件
+
 ### version
 
 显示 JMP 版本信息
@@ -222,14 +307,18 @@ jmp/
 ├── src/
 │   ├── commands/              # 命令实现模块
 │   │   ├── Invoke-Current.ps1 # 显示当前 Java 版本
+│   │   ├── Invoke-Doctor.ps1  # 诊断 Java 环境问题
 │   │   ├── Invoke-Help.ps1    # 显示帮助信息
+│   │   ├── Invoke-Info.ps1    # 显示 Java 详细信息
 │   │   ├── Invoke-List.ps1    # 列出所有 Java 安装
 │   │   ├── Invoke-Pin.ps1     # 固定 Java 版本
+│   │   ├── Invoke-Reset.ps1   # 重置 JMP 到初始状态
 │   │   ├── Invoke-Scan.ps1    # 扫描 Java 安装
 │   │   ├── Invoke-Unpin.ps1   # 移除固定的 Java 版本
 │   │   ├── Invoke-Unuse.ps1   # 清除当前会话的 Java 设置
 │   │   ├── Invoke-Use.ps1     # 切换 Java 版本
-│   │   └── Invoke-Version.ps1 # 显示版本信息
+│   │   ├── Invoke-Version.ps1 # 显示版本信息
+│   │   └── Invoke-Which.ps1   # 预览会选中的 Java
 │   ├── core/                  # 核心模块
 │   │   ├── Args.ps1           # 参数解析
 │   │   ├── Bootstrap.ps1      # 模块加载引导（自动加载所有 .ps1 文件）
@@ -330,6 +419,15 @@ MIT License
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.3.0
+
+- ✅ **新增 `info` 命令**：显示 Java 发行版的详细信息（版本、供应商、架构、release 文件、属性等）
+- ✅ **新增 `doctor` 命令**：诊断 Java 环境问题，检测缓存时效、PATH 污染、JAVA_HOME 一致性等
+- ✅ **新增 `which` 命令**：预览会选中哪个 Java 版本，但不实际切换
+- ✅ **新增 `reset` 命令**：一键重置 JMP 到初始状态（清除会话/用户/系统 JAVA_HOME 和缓存）
+- ✅ **新增 `--system` 选项**：`reset` 命令支持清除系统环境变量（需要管理员）
+- ✅ **新增 `--force` 选项**：`reset` 命令支持跳过确认提示（用于脚本）
 
 ### v1.2.1
 
