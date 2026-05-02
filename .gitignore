@@ -8,3 +8,7 @@ test_*.ps1
 new.txt
 fd-v*/
 fd.exe
+# Claw Code local artifacts
+.claw/settings.local.json
+.claw/sessions/
+.clawhip/

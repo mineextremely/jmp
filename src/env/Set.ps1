@@ -243,15 +243,6 @@ function Clear-JavaEnvironment {
     $env:JAVA_HOME = $null
     $env:PATH = Remove-JavaBinEntriesFromPath -PathValue $env:PATH -ExtraJavaHomes @($oldJavaHome)
 
-    # 先保存旧值用于精确清理，再清除 JAVA_HOME
-    $oldJavaHome = $env:JAVA_HOME
-    $env:JAVA_HOME = $null
-
-    if ($oldJavaHome) {
-        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin;"), ""
-        $env:PATH = $env:PATH -replace [regex]::Escape("$oldJavaHome\bin"), ""
-    }
-
     # 过滤掉所有残留的 Java bin 路径
     $pathParts = $env:PATH -split ';'
     $filteredParts = @()
