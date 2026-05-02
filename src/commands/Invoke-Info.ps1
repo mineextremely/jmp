@@ -100,20 +100,6 @@ function Get-JavaArchitecture {
         if ($content -match 'OS_ARCH="([^"]+)"') {
             return $matches[1]
         }
-        if ($content -match 'OS_NAME="([^"]+)"') {
-            $osName = $matches[1]
-            if ($osName -match 'Windows') {
-                # Check for amd64 or x64
-                if ($content -match 'OS_ARCH="([^"]+)"') {
-                    return $matches[1]
-                }
-                # Heuristic: check if path contains x64 or amd64
-                if ($JavaHome -match 'x64|amd64|win32|x86') {
-                    return "x64"
-                }
-                return "x86"
-            }
-        }
     }
 
     # Fallback: check executable
@@ -124,7 +110,15 @@ function Get-JavaArchitecture {
             if ($output -match '64-Bit') {
                 return "x64"
             }
-        } catch {}
+            if ($output -match 'ARM64|aarch64') {
+                return "arm64"
+            }
+            if ($output -match '32-Bit') {
+                return "x86"
+            }
+        } catch {
+            if ($Global:JmpDebug) { Log-Debug "Failed to detect architecture from java -version: $_" }
+        }
     }
 
     return "unknown"

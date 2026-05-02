@@ -291,9 +291,11 @@ function Scan-Java-CommonPaths {
                     if ($verLine -match '"([\d._]+)"') {
                         $version = $matches[1]
                     }
-                } catch {}
+                } catch {
+                    if ($Global:JmpDebug) { Log-Debug "Failed to get version from java.exe in common paths" }
+                }
             }
-            
+
             $vendor = Detect-Vendor $javaHome
             $parsedVersion = Parse-JavaVersion $version
             
@@ -337,11 +339,12 @@ function Scan-Java-Light {
     Write-Info "Scanning common paths..."
     $results += Scan-Java-CommonPaths
     
-    # 去重（按路径）
+    # 去重（按路径，大小写不敏感）
     $uniqueResults = @{}
     foreach ($result in $results) {
-        if (-not $uniqueResults.ContainsKey($result.path)) {
-            $uniqueResults[$result.path] = $result
+        $key = ([string]$result.path).ToLowerInvariant()
+        if (-not $uniqueResults.ContainsKey($key)) {
+            $uniqueResults[$key] = $result
         }
     }
     

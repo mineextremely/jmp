@@ -1,3 +1,24 @@
 {
-  "priority": ["temurin", "zulu", "oracle", "graalvm", "unknown"]
+  "priority": [
+    "temurin",
+    "zulu",
+    "liberica",
+    "oracle",
+    "corretto",
+    "microsoft",
+    "graalvm",
+    "redhat",
+    "sap_machine",
+    "dragonwell",
+    "kona",
+    "bisheng",
+    "jetbrains",
+    "semeru",
+    "mandrel",
+    "openlogic",
+    "trava",
+    "aoj",
+    "ojdk_build",
+    "unknown"
+  ]
 }

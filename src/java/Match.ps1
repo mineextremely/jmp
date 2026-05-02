@@ -68,11 +68,3 @@ function Parse-JavaVersion {
     return $versionObj
 }
 
-function ConvertTo-SortableVersion {
-    param([string]$VersionString)
-    # 将下划线替换为点，以便System.Version可以解析
-    $normalized = $VersionString -replace '_', '.'
-    # 移除可能存在的非数字后缀（如+号等）
-    # 但Java版本字符串通常是干净的，所以直接返回
-    return $normalized
-}

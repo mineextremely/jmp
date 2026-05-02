@@ -43,14 +43,27 @@ function Detect-Vendor($Path) {
 function Detect-VendorByPath($Path) {
     $pathLower = $Path.ToLower()
     $vendors = @()
-    
-    if ($pathLower -match "temurin|adoptium") { $vendors += "temurin" }
+
+    # GraalVM variants checked before oracle to avoid false match on "Oracle" in path
+    if ($pathLower -match "mandrel") { $vendors += "mandrel" }
     if ($pathLower -match "graalvm") { $vendors += "graalvm" }
+    if ($pathLower -match "temurin|adoptium") { $vendors += "temurin" }
     if ($pathLower -match "zulu") { $vendors += "zulu" }
-    if ($pathLower -match "oracle") { $vendors += "oracle" }
     if ($pathLower -match "liberica|bellsoft") { $vendors += "liberica" }
     if ($pathLower -match "corretto|amazon") { $vendors += "corretto" }
-    
+    if ($pathLower -match "dragonwell|alibaba") { $vendors += "dragonwell" }
+    if ($pathLower -match "jetbrains|jbr") { $vendors += "jetbrains" }
+    if ($pathLower -match "semeru") { $vendors += "semeru" }
+    if ($pathLower -match "sapmachine") { $vendors += "sap_machine" }
+    if ($pathLower -match "kona") { $vendors += "kona" }
+    if ($pathLower -match "bisheng|huawei") { $vendors += "bisheng" }
+    if ($pathLower -match "redhat|red.hat") { $vendors += "redhat" }
+    if ($pathLower -match "microsoft") { $vendors += "microsoft" }
+    if ($pathLower -match "oracle") { $vendors += "oracle" }
+    if ($pathLower -match "openlogic") { $vendors += "openlogic" }
+    if ($pathLower -match "trava") { $vendors += "trava" }
+    if ($pathLower -match "adoptopenjdk|aoj") { $vendors += "aoj" }
+
     if ($vendors.Count -eq 0) { return "unknown" }
     return $vendors[0]
 }
@@ -85,12 +98,24 @@ function Detect-VendorByReleaseFile($Path) {
             }
 
             # 映射 IMPLEMENTOR 到标准 vendor 名称（使用大小写不敏感匹配）
-            if ($implementor -imatch "bellsoft|liberica") { return "liberica" }
-            if ($implementor -imatch "amazon|corretto") { return "corretto" }
+            if ($implementor -imatch "mandrel") { return "mandrel" }
+            if ($implementor -imatch "graalvm") { return "graalvm" }
             if ($implementor -imatch "eclipse|temurin|adoptium") { return "temurin" }
             if ($implementor -imatch "azul|zulu") { return "zulu" }
+            if ($implementor -imatch "bellsoft|liberica") { return "liberica" }
+            if ($implementor -imatch "amazon|corretto") { return "corretto" }
+            if ($implementor -imatch "alibaba|dragonwell") { return "dragonwell" }
+            if ($implementor -imatch "jetbrains") { return "jetbrains" }
+            if ($implementor -imatch "ibm|semeru") { return "semeru" }
+            if ($implementor -imatch "sap") { return "sap_machine" }
+            if ($implementor -imatch "tencent|kona") { return "kona" }
+            if ($implementor -imatch "huawei|bisheng") { return "bisheng" }
+            if ($implementor -imatch "red.hat|redhat") { return "redhat" }
+            if ($implementor -imatch "microsoft") { return "microsoft" }
             if ($implementor -imatch "oracle") { return "oracle" }
-            if ($implementor -imatch "graalvm") { return "graalvm" }
+            if ($implementor -imatch "openlogic") { return "openlogic" }
+            if ($implementor -imatch "trava") { return "trava" }
+            if ($implementor -imatch "adoptopenjdk") { return "aoj" }
         }
 
         return "unknown"
@@ -141,15 +166,36 @@ function Detect-VendorByVersionOutput($Path) {
             if ($vendor -imatch "Azul Systems") { return "zulu" }
             if ($vendor -imatch "Oracle Corporation") { return "oracle" }
             if ($vendor -imatch "Microsoft") { return "microsoft" }
+            if ($vendor -imatch "Alibaba|Dragonwell") { return "dragonwell" }
+            if ($vendor -imatch "JetBrains") { return "jetbrains" }
+            if ($vendor -imatch "IBM|Semeru") { return "semeru" }
+            if ($vendor -imatch "SAP") { return "sap_machine" }
+            if ($vendor -imatch "Tencent|Kona") { return "kona" }
+            if ($vendor -imatch "Huawei|BiSheng") { return "bisheng" }
+            if ($vendor -imatch "Red Hat|RedHat") { return "redhat" }
+            if ($vendor -imatch "OpenLogic") { return "openlogic" }
+            if ($vendor -imatch "Trava") { return "trava" }
         }
 
         # 兜底：检查输出中的其他关键词
         $outputLower = $output.ToLower()
+        if ($outputLower -match "mandrel") { return "mandrel" }
         if ($outputLower -match "corretto") { return "corretto" }
         if ($outputLower -match "liberica|bellsoft") { return "liberica" }
         if ($outputLower -match "temurin|adoptium") { return "temurin" }
         if ($outputLower -match "zulu|azul") { return "zulu" }
+        if ($outputLower -match "dragonwell|alibaba") { return "dragonwell" }
+        if ($outputLower -match "jetbrains|jbr") { return "jetbrains" }
+        if ($outputLower -match "semeru|ibm") { return "semeru" }
+        if ($outputLower -match "sapmachine|sap") { return "sap_machine" }
+        if ($outputLower -match "tencent|kona") { return "kona" }
+        if ($outputLower -match "bisheng|huawei") { return "bisheng" }
+        if ($outputLower -match "redhat|red.hat") { return "redhat" }
+        if ($outputLower -match "openlogic") { return "openlogic" }
+        if ($outputLower -match "trava") { return "trava" }
+        if ($outputLower -match "adoptopenjdk") { return "aoj" }
         if ($outputLower -match "oracle") { return "oracle" }
+        if ($outputLower -match "microsoft") { return "microsoft" }
 
         return "unknown"
     } catch {
@@ -165,7 +211,10 @@ function Get-VendorPriority {
     if ($vendorFile -and $vendorFile.priority) {
         return $vendorFile.priority
     } else {
-        # 默认优先级
-        return @("temurin", "zulu", "oracle", "graalvm", "unknown")
+        # 默认优先级（与 config/vendor-priority.json 保持一致）
+        return @("temurin", "zulu", "liberica", "oracle", "corretto", "microsoft",
+                 "graalvm", "redhat", "sap_machine", "dragonwell", "kona", "bisheng",
+                 "jetbrains", "semeru", "mandrel", "openlogic", "trava", "aoj",
+                 "ojdk_build", "unknown")
     }
 }

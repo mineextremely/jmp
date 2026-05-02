@@ -204,9 +204,11 @@ function Scan-Java-BFS {
                                     if ($verLine -match '"([\d._]+)"') {
                                         $version = $matches[1]
                                     }
-                                } catch {}
+                                } catch {
+                                    if ($Global:JmpDebug) { Log-Debug "Failed to get version from java.exe: $javaExe" }
+                                }
                             }
-                            
+
                             if ($version) {
                                 $vendor = Detect-Vendor $dir
                                 $parsedVersion = Parse-JavaVersion $version

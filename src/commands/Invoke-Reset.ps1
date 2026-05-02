@@ -3,12 +3,8 @@
 function Invoke-Reset {
     param($Ctx)
 
-    # No arguments provided - proceed with reset
-    if ($Ctx.Args.Count -eq 1) {
-        # Continue to main logic
-    }
     # Handle --help / -h
-    elseif ($Ctx.Args[1] -eq "--help" -or $Ctx.Args[1] -eq "-h") {
+    if ($Ctx.Args.Count -ge 2 -and ($Ctx.Args[1] -eq "--help" -or $Ctx.Args[1] -eq "-h")) {
         Write-Warning "Usage: jmp reset [--system] [--force]"
         Write-Info "  Reset JMP to a clean state (clears session/user JAVA_HOME and cache)"
         Write-Info ""
@@ -79,11 +75,11 @@ function Invoke-Reset {
     Clear-JavaEnvironment | Out-Null
 
     # 2. Clear user JAVA_HOME
-    $removedUser = Remove-PersistentJavaEnvironment -Scope "user"
+    Remove-PersistentJavaEnvironment -Scope "user" | Out-Null
 
     # 3. Clear system JAVA_HOME if requested
     if ($clearSystem) {
-        $removedSystem = Remove-PersistentJavaEnvironment -Scope "system"
+        Remove-PersistentJavaEnvironment -Scope "system" | Out-Null
     }
 
     # 4. Delete cache file
