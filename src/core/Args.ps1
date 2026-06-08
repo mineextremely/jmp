@@ -49,6 +49,11 @@ function Invoke-JmpCommand {
         "pin"     { Invoke-Pin $Ctx }
         "unpin"   { Invoke-Unpin $Ctx }
         "current" { Invoke-Current $Ctx }
+        "info"    { Invoke-Info $Ctx }
+        "doctor"  { Invoke-Doctor $Ctx }
+        "which"   { Invoke-Which $Ctx }
+        "reset"   { Invoke-Reset $Ctx }
+        "install" { Invoke-Install $Ctx }
         "version" { Invoke-Version $Ctx }
         "help"    { Invoke-Help $Ctx }
         default   { Invoke-Help $Ctx }

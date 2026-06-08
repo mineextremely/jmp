@@ -25,12 +25,14 @@
     $data = @()
     foreach ($item in $jsonData) {
         $data += [pscustomobject]@{
-            Name = $item.name
-            Version = $item.version
-            VersionObj = [pscustomobject]$item.versionObj
-            Vendor = $item.vendor
-            Path = $item.path
-            Source = $item.source
+            Name           = $item.name
+            Version        = $item.version
+            VersionObj     = [pscustomobject]$item.versionObj
+            Vendor         = $item.vendor
+            Path           = $item.path
+            Source         = $item.source
+            RuntimeVersion = $item.runtimeVersion
+            IsLts          = $item.isLts
         }
     }
 

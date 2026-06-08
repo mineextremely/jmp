@@ -1,3 +1,4 @@
+CLAUDE.md
 java-versions.json
 jmp.origin.ps1
 AGENTS.md
@@ -7,3 +8,8 @@ test_*.ps1
 new.txt
 fd-v*/
 fd.exe
+# Claw Code local artifacts
+.claw/settings.local.json
+.claw/sessions/
+.clawhip/
+bin/jdks

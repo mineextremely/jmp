@@ -9,22 +9,18 @@
 #    - Download-Fd
 #    - Ask-DownloadFd
 #
-# 2. Fallback.ps1
-#    - Scan-Java-Fallback
-#    - Invoke-FallbackScan
-#
-# 3. LightScan.ps1
+# 2. LightScan.ps1
 #    - Scan-Java-Registry
 #    - Scan-Java-MicrosoftStore
 #    - Scan-Java-CommonPaths
 #    - Scan-Java-Light
 #
-# 4. BFSScan.ps1
+# 3. BFSScan.ps1
 #    - Get-SearchRoots
 #    - ShouldScanDirectory
 #    - Scan-Java-BFS
 #
-# 5. FDScan.ps1
+# 4. FDScan.ps1
 #    - Scan-Java-WithFD
 #
 # 所有模块会通过 src/core/Bootstrap.ps1 自动加载

@@ -3,8 +3,6 @@
 function Invoke-Scan {
     param($Ctx)
     
-    $results = @()
-    
     # 根据 ScanMode 决定扫描策略
     if ($Ctx.ScanMode -eq "light") {
         # 轻量模式：仅使用注册表、Microsoft Store 和常见目录
@@ -48,16 +46,18 @@ function Invoke-Scan {
         # 2. 执行 BFS 深度扫描（查找更多 Java）
         $bfsResults = @(Scan-Java-BFS -MaxDepth 8)
         
-        # 3. 合并结果并去重
+        # 3. 合并结果并去重（大小写不敏感）
         $uniqueResults = @{}
         foreach ($result in $results) {
-            if (-not $uniqueResults.ContainsKey($result.path)) {
-                $uniqueResults[$result.path] = $result
+            $key = ([string]$result.path).ToLowerInvariant()
+            if (-not $uniqueResults.ContainsKey($key)) {
+                $uniqueResults[$key] = $result
             }
         }
         foreach ($result in $bfsResults) {
-            if (-not $uniqueResults.ContainsKey($result.path)) {
-                $uniqueResults[$result.path] = $result
+            $key = ([string]$result.path).ToLowerInvariant()
+            if (-not $uniqueResults.ContainsKey($key)) {
+                $uniqueResults[$key] = $result
             }
         }
         
@@ -65,8 +65,14 @@ function Invoke-Scan {
     }
     
     # 保存结果到 JSON 文件
-    if ($results) {
-        Save-Json (Join-Path $Script:ProjectRoot "java-versions.json") $results
+    $cachePath = Join-Path $Script:ProjectRoot "java-versions.json"
+    if ($results.Count -gt 0) {
+        Save-Json $cachePath $results
+    } else {
+        if (Test-Path $cachePath) {
+            Remove-Item $cachePath -Force
+            Write-Info "Cleared stale cache (no Java installations found)."
+        }
     }
     
     Write-Success "Scan completed. Found $($results.Count) Java installations."

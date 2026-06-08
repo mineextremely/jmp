@@ -68,11 +68,29 @@ function Parse-JavaVersion {
     return $versionObj
 }
 
-function ConvertTo-SortableVersion {
-    param([string]$VersionString)
-    # 将下划线替换为点，以便System.Version可以解析
-    $normalized = $VersionString -replace '_', '.'
-    # 移除可能存在的非数字后缀（如+号等）
-    # 但Java版本字符串通常是干净的，所以直接返回
-    return $normalized
+function Read-JavaRelease {
+    param([string]$JavaHome)
+
+    $releaseFile = Join-Path $JavaHome "release"
+    if (-not (Test-Path $releaseFile)) { return $null }
+
+    try {
+        $content = Get-Content $releaseFile -Raw -Encoding UTF8 -ErrorAction Stop
+        $result = [pscustomobject]@{
+            version        = ""
+            runtimeVersion = ""
+            isLts          = $false
+        }
+        if ($content -match 'JAVA_VERSION="([^"]+)"') {
+            $result.version = $matches[1]
+        }
+        if ($content -match 'JAVA_RUNTIME_VERSION="([^"]+)"') {
+            $result.runtimeVersion = $matches[1]
+            $result.isLts = ($matches[1] -match '-LTS')
+        }
+        return $result
+    } catch {
+        if ($Global:JmpDebug) { Log-Debug "Failed to read release file: $releaseFile" }
+        return $null
+    }
 }

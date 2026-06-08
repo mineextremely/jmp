@@ -186,38 +186,40 @@ function Scan-Java-BFS {
                         $javaExe = Join-Path $dir "bin\java.exe"
                         if (Test-Path $javaExe) {
                             # 验证是否是有效的 Java 安装
-                            $release = Join-Path $dir "release"
+                            $releaseInfo = Read-JavaRelease $dir
                             $version = ""
-                            
-                            if (Test-Path $release) {
-                                $verLine = Get-Content $release -ErrorAction SilentlyContinue |
-                                    Where-Object { $_ -like 'JAVA_VERSION=*' }
-                                if ($verLine) {
-                                    $version = ($verLine -split '"')[1].Trim('"')
-                                }
-                            }
-                            
-                            # 如果无法从 release 文件获取版本，尝试运行 java -version
-                            if (-not $version) {
+                            $rtVersion = ""
+                            $lts = $false
+
+                            if ($releaseInfo -and $releaseInfo.version) {
+                                $version = $releaseInfo.version
+                                $rtVersion = $releaseInfo.runtimeVersion
+                                $lts = $releaseInfo.isLts
+                            } else {
+                                # 如果无法从 release 文件获取版本，尝试运行 java -version
                                 try {
                                     $verLine = & $javaExe -version 2>&1 | Select-Object -First 1
                                     if ($verLine -match '"([\d._]+)"') {
                                         $version = $matches[1]
                                     }
-                                } catch {}
+                                } catch {
+                                    if ($Global:JmpDebug) { Log-Debug "Failed to get version from java.exe: $javaExe" }
+                                }
                             }
-                            
+
                             if ($version) {
                                 $vendor = Detect-Vendor $dir
                                 $parsedVersion = Parse-JavaVersion $version
-                                
+
                                 $results += [pscustomobject]@{
-                                    name    = Split-Path $dir -Leaf
-                                    version = $version
-                                    versionObj = $parsedVersion
-                                    vendor  = $vendor
-                                    path    = $dir
-                                    source  = "bfs"
+                                    name           = Split-Path $dir -Leaf
+                                    version        = $version
+                                    versionObj     = $parsedVersion
+                                    vendor         = $vendor
+                                    path           = $dir
+                                    source         = "bfs"
+                                    runtimeVersion = $rtVersion
+                                    isLts          = $lts
                                 }
                                 
                                 $foundCount++

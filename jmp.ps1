@@ -76,6 +76,21 @@ if ($JmpArgs.Count -eq 0) {
     elseif ($Command -eq "version") {
         Invoke-Version $ctx
     }
+    elseif ($Command -eq "info") {
+        Invoke-Info $ctx
+    }
+    elseif ($Command -eq "doctor") {
+        Invoke-Doctor $ctx
+    }
+    elseif ($Command -eq "which") {
+        Invoke-Which $ctx
+    }
+    elseif ($Command -eq "reset") {
+        Invoke-Reset $ctx
+    }
+    elseif ($Command -eq "install") {
+        Invoke-Install $ctx
+    }
     elseif ($Command -eq "help") {
         Invoke-Help $ctx
     }

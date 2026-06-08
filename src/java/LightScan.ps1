@@ -30,27 +30,24 @@ function Scan-Java-Registry {
                         if (-not (Test-Path $javaExe)) { continue }
                         
                         # 获取版本信息
-                        $release = Join-Path $javaHome "release"
-                        if (Test-Path $release) {
-                            $verLine = Get-Content $release -ErrorAction SilentlyContinue |
-                                Where-Object { $_ -like 'JAVA_VERSION=*' }
-                            if ($verLine) {
-                                $version = ($verLine -split '"')[1].Trim('"')
-                                $vendor = Detect-Vendor $javaHome
-                                $parsedVersion = Parse-JavaVersion $version
-                                
-                                $results += [pscustomobject]@{
-                                    name    = Split-Path $javaHome -Leaf
-                                    version = $version
-                                    versionObj = $parsedVersion
-                                    vendor  = $vendor
-                                    path    = $javaHome
-                                    source  = "registry"
-                                }
-                                
-                                if ($Global:JmpDebug) {
-                                    Log-Debug "Found Java from registry: $javaHome ($version)"
-                                }
+                        $releaseInfo = Read-JavaRelease $javaHome
+                        if ($releaseInfo -and $releaseInfo.version) {
+                            $version = $releaseInfo.version
+                            $vendor = Detect-Vendor $javaHome
+                            $parsedVersion = Parse-JavaVersion $version
+                            $results += [pscustomobject]@{
+                                name           = Split-Path $javaHome -Leaf
+                                version        = $version
+                                versionObj     = $parsedVersion
+                                vendor         = $vendor
+                                path           = $javaHome
+                                source         = "registry"
+                                runtimeVersion = $releaseInfo.runtimeVersion
+                                isLts          = $releaseInfo.isLts
+                            }
+
+                            if ($Global:JmpDebug) {
+                                Log-Debug "Found Java from registry: $javaHome ($version)"
                             }
                         }
                     } catch {
@@ -89,27 +86,25 @@ function Scan-Java-Registry {
                         if (-not (Test-Path $javaExe)) { continue }
                         
                         # 获取版本信息
-                        $release = Join-Path $installPath "release"
-                        if (Test-Path $release) {
-                            $verLine = Get-Content $release -ErrorAction SilentlyContinue |
-                                Where-Object { $_ -like 'JAVA_VERSION=*' }
-                            if ($verLine) {
-                                $version = ($verLine -split '"')[1].Trim('"')
-                                $vendor = Detect-Vendor $installPath
-                                $parsedVersion = Parse-JavaVersion $version
-                                
-                                $results += [pscustomobject]@{
-                                    name    = Split-Path $installPath -Leaf
-                                    version = $version
-                                    versionObj = $parsedVersion
-                                    vendor  = $vendor
-                                    path    = $installPath
-                                    source  = "registry"
-                                }
-                                
-                                if ($Global:JmpDebug) {
-                                    Log-Debug "Found Java from brand registry: $installPath ($version)"
-                                }
+                        $releaseInfo = Read-JavaRelease $installPath
+                        if ($releaseInfo -and $releaseInfo.version) {
+                            $version = $releaseInfo.version
+                            $vendor = Detect-Vendor $installPath
+                            $parsedVersion = Parse-JavaVersion $version
+
+                            $results += [pscustomobject]@{
+                                name           = Split-Path $installPath -Leaf
+                                version        = $version
+                                versionObj     = $parsedVersion
+                                vendor         = $vendor
+                                path           = $installPath
+                                source         = "registry"
+                                runtimeVersion = $releaseInfo.runtimeVersion
+                                isLts          = $releaseInfo.isLts
+                            }
+
+                            if ($Global:JmpDebug) {
+                                Log-Debug "Found Java from brand registry: $installPath ($version)"
                             }
                         }
                     } catch {
@@ -166,34 +161,32 @@ function Scan-Java-MicrosoftStore {
                         foreach ($versionDir in $versionDirs) {
                             $javaExe = Join-Path $versionDir.FullName "bin\java.exe"
                             if (Test-Path $javaExe) {
-                                $release = Join-Path $versionDir.FullName "release"
+                                $releaseInfo = Read-JavaRelease $versionDir.FullName
                                 $version = ""
-                                
-                                if (Test-Path $release) {
-                                    $verLine = Get-Content $release -ErrorAction SilentlyContinue |
-                                        Where-Object { $_ -like 'JAVA_VERSION=*' }
-                                    if ($verLine) {
-                                        $version = ($verLine -split '"')[1].Trim('"')
-                                    }
-                                }
-                                
-                                if (-not $version) {
+                                $rtVersion = ""
+                                $lts = $false
+
+                                if ($releaseInfo -and $releaseInfo.version) {
+                                    $version = $releaseInfo.version
+                                    $rtVersion = $releaseInfo.runtimeVersion
+                                    $lts = $releaseInfo.isLts
+                                } elseif ($versionDir.Name -match '(\d+)') {
                                     # 如果无法从 release 文件获取版本，尝试从目录名解析
-                                    if ($versionDir.Name -match '(\d+)') {
-                                        $version = $matches[1]
-                                    }
+                                    $version = $matches[1]
                                 }
-                                
+
                                 $vendor = "microsoft"
                                 $parsedVersion = Parse-JavaVersion $version
-                                
+
                                 $results += [pscustomobject]@{
-                                    name    = $versionDir.Name
-                                    version = $version
-                                    versionObj = $parsedVersion
-                                    vendor  = $vendor
-                                    path    = $versionDir.FullName
-                                    source  = "store"
+                                    name           = $versionDir.Name
+                                    version        = $version
+                                    versionObj     = $parsedVersion
+                                    vendor         = $vendor
+                                    path           = $versionDir.FullName
+                                    source         = "store"
+                                    runtimeVersion = $rtVersion
+                                    isLts          = $lts
                                 }
                                 
                                 Write-Info "Found Microsoft Store Java: $javaExe"
@@ -273,17 +266,17 @@ function Scan-Java-CommonPaths {
             if (-not (Test-Path $javaExe)) { continue }
             
             # 尝试获取版本
-            $release = Join-Path $javaHome "release"
+            $releaseInfo = Read-JavaRelease $javaHome
             $version = ""
-            
-            if (Test-Path $release) {
-                $verLine = Get-Content $release -ErrorAction SilentlyContinue |
-                    Where-Object { $_ -like 'JAVA_VERSION=*' }
-                if ($verLine) {
-                    $version = ($verLine -split '"')[1].Trim('"')
-                }
+            $rtVersion = ""
+            $lts = $false
+
+            if ($releaseInfo -and $releaseInfo.version) {
+                $version = $releaseInfo.version
+                $rtVersion = $releaseInfo.runtimeVersion
+                $lts = $releaseInfo.isLts
             }
-            
+
             # 如果无法从 release 文件获取版本，尝试运行 java -version
             if (-not $version) {
                 try {
@@ -291,19 +284,23 @@ function Scan-Java-CommonPaths {
                     if ($verLine -match '"([\d._]+)"') {
                         $version = $matches[1]
                     }
-                } catch {}
+                } catch {
+                    if ($Global:JmpDebug) { Log-Debug "Failed to get version from java.exe in common paths" }
+                }
             }
-            
+
             $vendor = Detect-Vendor $javaHome
             $parsedVersion = Parse-JavaVersion $version
-            
+
             $results += [pscustomobject]@{
-                name    = Split-Path $javaHome -Leaf
-                version = $version
-                versionObj = $parsedVersion
-                vendor  = $vendor
-                path    = $javaHome
-                source  = "common"
+                name           = Split-Path $javaHome -Leaf
+                version        = $version
+                versionObj     = $parsedVersion
+                vendor         = $vendor
+                path           = $javaHome
+                source         = "common"
+                runtimeVersion = $rtVersion
+                isLts          = $lts
             }
             
             if ($Global:JmpDebug) {
@@ -337,11 +334,12 @@ function Scan-Java-Light {
     Write-Info "Scanning common paths..."
     $results += Scan-Java-CommonPaths
     
-    # 去重（按路径）
+    # 去重（按路径，大小写不敏感）
     $uniqueResults = @{}
     foreach ($result in $results) {
-        if (-not $uniqueResults.ContainsKey($result.path)) {
-            $uniqueResults[$result.path] = $result
+        $key = ([string]$result.path).ToLowerInvariant()
+        if (-not $uniqueResults.ContainsKey($key)) {
+            $uniqueResults[$key] = $result
         }
     }
     
