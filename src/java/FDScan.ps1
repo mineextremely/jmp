@@ -55,26 +55,22 @@ function Scan-Java-WithFD {
                     # 检查是否已经处理过相同的 javaHome（去重）
                     if ($results.path -contains $javaHome) { continue }
                     
-                    $release = Join-Path $javaHome "release"
-                    
-                    if (-not (Test-Path $release)) { continue }
-                    
-                    $verLine = Get-Content $release -ErrorAction SilentlyContinue |
-                        Where-Object { $_ -like 'JAVA_VERSION=*' }
-                    
-                    if (-not $verLine) { continue }
-                    
-                    $version = ($verLine -split '"')[1].Trim('"')
+                    $releaseInfo = Read-JavaRelease $javaHome
+                    if (-not $releaseInfo -or -not $releaseInfo.version) { continue }
+
+                    $version = $releaseInfo.version
                     $vendor = Detect-Vendor $javaHome
                     $parsedVersion = Parse-JavaVersion $version
-                    
+
                     $results += [pscustomobject]@{
-                        name    = Split-Path $javaHome -Leaf
-                        version = $version
-                        versionObj = $parsedVersion
-                        vendor  = $vendor
-                        path    = $javaHome
-                        source  = "fd"
+                        name           = Split-Path $javaHome -Leaf
+                        version        = $version
+                        versionObj     = $parsedVersion
+                        vendor         = $vendor
+                        path           = $javaHome
+                        source         = "fd"
+                        runtimeVersion = $releaseInfo.runtimeVersion
+                        isLts          = $releaseInfo.isLts
                     }
                 }
             }

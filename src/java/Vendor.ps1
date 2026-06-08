@@ -46,6 +46,7 @@ function Detect-VendorByPath($Path) {
 
     # GraalVM variants checked before oracle to avoid false match on "Oracle" in path
     if ($pathLower -match "mandrel") { $vendors += "mandrel" }
+    if ($pathLower -match "graalvm.community|graalvm.ce") { $vendors += "graalvm_community" }
     if ($pathLower -match "graalvm") { $vendors += "graalvm" }
     if ($pathLower -match "temurin|adoptium") { $vendors += "temurin" }
     if ($pathLower -match "zulu") { $vendors += "zulu" }
@@ -99,6 +100,7 @@ function Detect-VendorByReleaseFile($Path) {
 
             # 映射 IMPLEMENTOR 到标准 vendor 名称（使用大小写不敏感匹配）
             if ($implementor -imatch "mandrel") { return "mandrel" }
+            if ($implementor -imatch "graalvm.community") { return "graalvm_community" }
             if ($implementor -imatch "graalvm") { return "graalvm" }
             if ($implementor -imatch "eclipse|temurin|adoptium") { return "temurin" }
             if ($implementor -imatch "azul|zulu") { return "zulu" }
@@ -212,8 +214,9 @@ function Get-VendorPriority {
         return $vendorFile.priority
     } else {
         # 默认优先级（与 config/vendor-priority.json 保持一致）
-        return @("temurin", "zulu", "liberica", "oracle", "corretto", "microsoft",
-                 "graalvm", "redhat", "sap_machine", "dragonwell", "kona", "bisheng",
+        return @("temurin", "zulu", "liberica", "oracle", "oracle_open_jdk",
+                 "corretto", "microsoft", "graalvm", "graalvm_community",
+                 "redhat", "sap_machine", "dragonwell", "kona", "bisheng",
                  "jetbrains", "semeru", "mandrel", "openlogic", "trava", "aoj",
                  "ojdk_build", "unknown")
     }

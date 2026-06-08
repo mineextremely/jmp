@@ -88,6 +88,9 @@ if ($JmpArgs.Count -eq 0) {
     elseif ($Command -eq "reset") {
         Invoke-Reset $ctx
     }
+    elseif ($Command -eq "install") {
+        Invoke-Install $ctx
+    }
     elseif ($Command -eq "help") {
         Invoke-Help $ctx
     }

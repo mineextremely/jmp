@@ -68,3 +68,29 @@ function Parse-JavaVersion {
     return $versionObj
 }
 
+function Read-JavaRelease {
+    param([string]$JavaHome)
+
+    $releaseFile = Join-Path $JavaHome "release"
+    if (-not (Test-Path $releaseFile)) { return $null }
+
+    try {
+        $content = Get-Content $releaseFile -Raw -Encoding UTF8 -ErrorAction Stop
+        $result = [pscustomobject]@{
+            version        = ""
+            runtimeVersion = ""
+            isLts          = $false
+        }
+        if ($content -match 'JAVA_VERSION="([^"]+)"') {
+            $result.version = $matches[1]
+        }
+        if ($content -match 'JAVA_RUNTIME_VERSION="([^"]+)"') {
+            $result.runtimeVersion = $matches[1]
+            $result.isLts = ($matches[1] -match '-LTS')
+        }
+        return $result
+    } catch {
+        if ($Global:JmpDebug) { Log-Debug "Failed to read release file: $releaseFile" }
+        return $null
+    }
+}

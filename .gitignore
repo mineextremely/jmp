@@ -12,3 +12,4 @@ fd.exe
 .claw/settings.local.json
 .claw/sessions/
 .clawhip/
+bin/jdks

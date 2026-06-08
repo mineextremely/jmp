@@ -15,6 +15,7 @@ function Invoke-Help {
     Write-Info "  info    - Show detailed Java installation info"
     Write-Info "  doctor  - Run diagnostics and health checks"
     Write-Info "  reset   - Reset JMP to clean state (clear env vars and cache)"
+    Write-Info "  install - Download and install a JDK via Foojay Disco API"
     Write-Info "  version - Show script version"
     Write-Info "  help    - Show this help"
     Write-Info ""
