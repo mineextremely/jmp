@@ -72,12 +72,12 @@ function Invoke-Install {
     }
 
     # Determine install path
+    $dirName = "$($package.JmpVendor)-$($package.major_version)"
     if (-not $customPath) {
         $jdksDir = Join-Path $Script:ProjectRoot "bin\jdks"
-        $dirName = "$($package.JmpVendor)-$($package.major_version)"
         $installPath = Join-Path $jdksDir $dirName
     } else {
-        $installPath = $customPath
+        $installPath = Join-Path $customPath $dirName
     }
 
     # Confirm with user
@@ -85,6 +85,20 @@ function Invoke-Install {
     Write-Host "Installation details:" -ForegroundColor Cyan
     Write-Host "  Version   : " -NoNewline -ForegroundColor Gray
     Write-Host "$($package.java_version) ($($package.JmpVendor))" -ForegroundColor White
+
+    if ($package.VersionMeta) {
+        $meta = $package.VersionMeta
+        $tosLabel = $meta.termOfSupport.ToUpper()
+        $tosColor = if ($tosLabel -eq "LTS") { "Green" } else { "Yellow" }
+        Write-Host "  Support   : " -NoNewline -ForegroundColor Gray
+        Write-Host $tosLabel -ForegroundColor $tosColor -NoNewline
+        if ($meta.maintained) {
+            Write-Host "  (maintained)" -ForegroundColor Green
+        } else {
+            Write-Host "  (unmaintained)" -ForegroundColor Red
+        }
+    }
+
     Write-Host "  Size      : " -NoNewline -ForegroundColor Gray
     Write-Host "$([Math]::Round($package.size / 1MB, 1)) MB" -ForegroundColor White
     Write-Host "  Install to: " -NoNewline -ForegroundColor Gray
@@ -109,15 +123,19 @@ function Invoke-Install {
     $existing = if (Test-Path $cachePath) { @(Load-Json $cachePath) } else { @() }
 
     $releaseInfo = Read-JavaRelease $installPath
+    $entryVersion = if ($releaseInfo -and $releaseInfo.version) { $releaseInfo.version } else { $package.java_version }
+    $entryRtVer   = if ($releaseInfo) { $releaseInfo.runtimeVersion } else { "" }
+    $entryLts     = if ($releaseInfo) { $releaseInfo.isLts } else { $false }
+
     $newEntry = [pscustomobject]@{
         name           = Split-Path $installPath -Leaf
-        version        = if ($releaseInfo.version) { $releaseInfo.version } else { $package.java_version }
-        versionObj     = Parse-JavaVersion (if ($releaseInfo.version) { $releaseInfo.version } else { $package.java_version })
+        version        = $entryVersion
+        versionObj     = Parse-JavaVersion $entryVersion
         vendor         = Detect-Vendor $installPath
         path           = $installPath
         source         = "install"
-        runtimeVersion = if ($releaseInfo) { $releaseInfo.runtimeVersion } else { "" }
-        isLts          = if ($releaseInfo) { $releaseInfo.isLts } else { $false }
+        runtimeVersion = $entryRtVer
+        isLts          = $entryLts
     }
 
     $allResults = @($newEntry) + @($existing)

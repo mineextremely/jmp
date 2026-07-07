@@ -2,6 +2,7 @@
   "priority": [
     "temurin",
     "zulu",
+    "zulu_prime",
     "liberica",
     "oracle",
     "oracle_open_jdk",
@@ -10,6 +11,7 @@
     "graalvm",
     "graalvm_community",
     "redhat",
+    "debian",
     "sap_machine",
     "dragonwell",
     "kona",
@@ -19,6 +21,7 @@
     "mandrel",
     "openlogic",
     "trava",
+    "eliya",
     "aoj",
     "ojdk_build",
     "unknown"

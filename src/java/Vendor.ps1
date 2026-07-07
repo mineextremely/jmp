@@ -49,6 +49,7 @@ function Detect-VendorByPath($Path) {
     if ($pathLower -match "graalvm.community|graalvm.ce") { $vendors += "graalvm_community" }
     if ($pathLower -match "graalvm") { $vendors += "graalvm" }
     if ($pathLower -match "temurin|adoptium") { $vendors += "temurin" }
+    if ($pathLower -match "zulu_prime|zulu.prime") { $vendors += "zulu_prime" }
     if ($pathLower -match "zulu") { $vendors += "zulu" }
     if ($pathLower -match "liberica|bellsoft") { $vendors += "liberica" }
     if ($pathLower -match "corretto|amazon") { $vendors += "corretto" }
@@ -63,6 +64,8 @@ function Detect-VendorByPath($Path) {
     if ($pathLower -match "oracle") { $vendors += "oracle" }
     if ($pathLower -match "openlogic") { $vendors += "openlogic" }
     if ($pathLower -match "trava") { $vendors += "trava" }
+    if ($pathLower -match "eliya") { $vendors += "eliya" }
+    if ($pathLower -match "debian") { $vendors += "debian" }
     if ($pathLower -match "adoptopenjdk|aoj") { $vendors += "aoj" }
 
     if ($vendors.Count -eq 0) { return "unknown" }
@@ -214,10 +217,10 @@ function Get-VendorPriority {
         return $vendorFile.priority
     } else {
         # 默认优先级（与 config/vendor-priority.json 保持一致）
-        return @("temurin", "zulu", "liberica", "oracle", "oracle_open_jdk",
+        return @("temurin", "zulu", "zulu_prime", "liberica", "oracle", "oracle_open_jdk",
                  "corretto", "microsoft", "graalvm", "graalvm_community",
-                 "redhat", "sap_machine", "dragonwell", "kona", "bisheng",
-                 "jetbrains", "semeru", "mandrel", "openlogic", "trava", "aoj",
+                 "redhat", "debian", "sap_machine", "dragonwell", "kona", "bisheng",
+                 "jetbrains", "semeru", "mandrel", "openlogic", "trava", "eliya", "aoj",
                  "ojdk_build", "unknown")
     }
 }

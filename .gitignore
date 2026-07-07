@@ -13,3 +13,5 @@ fd.exe
 .claw/sessions/
 .clawhip/
 bin/jdks
+.claude/
+.python-test/

@@ -7,13 +7,14 @@ $Script:DiscoApiBase = "https://api.foojay.io/disco/v3.0"
 $Script:VendorToApiMap = @{
     "temurin"       = @("temurin")
     "zulu"          = @("zulu")
+    "zulu_prime"    = @("zulu_prime")
     "liberica"      = @("liberica", "liberica_native")
     "oracle"             = @("oracle")
     "oracle_open_jdk"    = @("oracle_open_jdk")
     "corretto"           = @("corretto")
     "microsoft"          = @("microsoft")
     "graalvm"            = @("graalvm", "gluon_graalvm")
-    "graalvm_community"  = @("graalvm_community", "graalvm_ce8", "graalvm_ce11", "graalvm_ce16", "graalvm_ce17", "graalvm_ce19")
+    "graalvm_community"  = @("graalvm_community", "graalvm_ce8", "graalvm_ce11", "graalvm_ce16", "graalvm_ce17", "graalvm_ce19", "graalvm_ce20")
     "dragonwell"    = @("dragonwell")
     "jetbrains"     = @("jetbrains")
     "semeru"        = @("semeru", "semeru_certified")
@@ -21,11 +22,41 @@ $Script:VendorToApiMap = @{
     "kona"          = @("kona")
     "bisheng"       = @("bisheng")
     "redhat"        = @("redhat")
+    "debian"        = @("debian")
     "mandrel"       = @("mandrel")
     "openlogic"     = @("openlogic")
     "trava"         = @("trava")
+    "eliya"         = @("eliya")
     "aoj"           = @("aoj", "aoj_openj9")
     "ojdk_build"    = @("ojdk_build")
+}
+
+$Script:AvailableVersionsCache = $null
+
+function Get-AvailableVersions {
+    if ($Script:AvailableVersionsCache) {
+        return $Script:AvailableVersionsCache
+    }
+
+    try {
+        $response = Invoke-RestMethod -Uri "$Script:DiscoApiBase/major_versions" -ErrorAction Stop
+        $versions = @{}
+        foreach ($v in $response.result) {
+            $key = [string]$v.major_version
+            $versions[$key] = [pscustomobject]@{
+                majorVersion     = $v.major_version
+                termOfSupport    = $v.term_of_support
+                maintained       = $v.maintained
+                releaseStatus    = $v.release_status
+                earlyAccessOnly  = $v.early_access_only
+            }
+        }
+        $Script:AvailableVersionsCache = $versions
+        return $versions
+    } catch {
+        if ($Global:JmpDebug) { Log-Debug "Failed to fetch major versions: $_" }
+        return $null
+    }
 }
 
 function Get-SystemArchitecture {
@@ -48,8 +79,11 @@ function Get-ApiDistributionNames {
     $vendorLower = $JmpVendor.ToLowerInvariant()
 
     if ($Script:VendorToApiMap.ContainsKey($vendorLower)) {
-        return $Script:VendorToApiMap[$vendorLower]
+        $result = $Script:VendorToApiMap[$vendorLower]
+        if ($Global:JmpDebug) { Log-Debug "VendorToApiMap['$vendorLower'] = [$($result -join ', ')]" }
+        return $result
     }
+    if ($Global:JmpDebug) { Log-Debug "Vendor '$vendorLower' not in map, using literal" }
     return @($vendorLower)
 }
 
@@ -60,10 +94,21 @@ function Find-JavaPackage {
     )
 
     $majorVersion = [string]$Version
+
+    # Validate version exists and get metadata
+    $allVersions = Get-AvailableVersions
+    if ($allVersions -and -not $allVersions.ContainsKey($majorVersion)) {
+        $available = ($allVersions.Keys | Sort-Object { [int]$_ }) -join ", "
+        Write-Warning "Java $majorVersion is not available via Foojay Disco API."
+        Write-Info "Available major versions: $available"
+        return $null
+    }
+    $versionMeta = if ($allVersions) { $allVersions[$majorVersion] } else { $null }
+
     $arch = Get-SystemArchitecture
 
     $queryParams = @(
-        "version=$majorVersion",
+        "major_version=$majorVersion",
         "operating_system=windows",
         "architecture=$arch",
         "package_type=jdk",
@@ -71,10 +116,23 @@ function Find-JavaPackage {
         "directly_downloadable=true",
         "release_status=ga"
     )
+    # When vendor specified, use distro API filter for efficiency
+    if ($Vendor) {
+        $apiNames = @(Get-ApiDistributionNames -JmpVendor $Vendor)
+        $distroValue = $apiNames[0]
+        if ($Global:JmpDebug) { Log-Debug "distro API name: '$distroValue'" }
+        $queryParams += "distro=$distroValue"
+    }
     $queryString = $queryParams -join "&"
     $apiUrl = "$Script:DiscoApiBase/packages?$queryString"
 
-    Write-Info "Querying Foojay Disco API for Java $majorVersion ($arch)..."
+    $supportLabel = ""
+    if ($versionMeta) {
+        $tosUpper = $versionMeta.termOfSupport.ToUpper()
+        $maintLabel = if ($versionMeta.maintained) { "maintained" } else { "unmaintained" }
+        $supportLabel = " ($tosUpper, $maintLabel)"
+    }
+    Write-Info "Querying Foojay Disco API for Java $majorVersion ($arch)$supportLabel..."
     if ($Global:JmpDebug) { Log-Debug "API URL: $apiUrl" }
 
     try {
@@ -114,12 +172,7 @@ function Find-JavaPackage {
                 if ([System.Version]::Parse($ver) -gt [System.Version]::Parse($deduped[$dist].distribution_version)) {
                     $deduped[$dist] = $pkg
                 }
-            } catch {
-                # If version parsing fails, keep the existing entry
-                if ($Global:JmpDebug) {
-                    Log-Debug "Cannot compare distribution_version '$ver' vs '$($deduped[$dist].distribution_version)' — keeping first"
-                }
-            }
+            } catch {}
         }
     }
     $packages = @($deduped.Values)
@@ -134,11 +187,10 @@ function Find-JavaPackage {
     $selectedVendor = $null
 
     if ($Vendor) {
-        $apiNames = Get-ApiDistributionNames -JmpVendor $Vendor
+        $apiNames = @(Get-ApiDistributionNames -JmpVendor $Vendor)
         if ($Global:JmpDebug) {
             Log-Debug "Looking for API distribution(s): $($apiNames -join ', ')"
         }
-        # Iterate in priority order — first in array wins
         foreach ($apiName in $apiNames) {
             $match = $packages | Where-Object { $_.distribution -eq $apiName } | Select-Object -First 1
             if ($match) {
@@ -157,7 +209,7 @@ function Find-JavaPackage {
 
     if (-not $match) {
         foreach ($priorityVendor in Get-VendorPriority) {
-            $apiNames = Get-ApiDistributionNames -JmpVendor $priorityVendor
+            $apiNames = @(Get-ApiDistributionNames -JmpVendor $priorityVendor)
             foreach ($apiName in $apiNames) {
                 $match = $packages | Where-Object { $_.distribution -eq $apiName } | Select-Object -First 1
                 if ($match) {
@@ -175,10 +227,14 @@ function Find-JavaPackage {
         return $null
     }
 
-    # Attach JMP vendor name for downstream use (path naming, display)
+    # Attach JMP vendor name and version metadata for downstream use
     $match | Add-Member -NotePropertyName "JmpVendor" -NotePropertyValue $selectedVendor -Force
+    if ($versionMeta) {
+        $match | Add-Member -NotePropertyName "VersionMeta" -NotePropertyValue $versionMeta -Force
+    }
 
-    Write-Info "Selected: $selectedVendor $($match.java_version) ($([Math]::Round($match.size / 1MB, 1)) MB)"
+    $sizeMB = [Math]::Round($match.size / 1MB, 1)
+    Write-Info "Selected: $selectedVendor $($match.java_version) ($sizeMB MB)"
     return $match
 }
 
